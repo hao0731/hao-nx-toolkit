@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "skills": {
+    "atomic-implementation-loop": {
+      "source": "git@github.com:hao0731/hao-engineering.git",
+      "sourceUrl": "git@github.com:hao0731/hao-engineering.git",
+      "sourceType": "git",
+      "skillPath": "skills/productivity/atomic-implementation-loop/SKILL.md",
+      "computedHash": "eacde6423033e589411a150b2ef4c11df9a148f4d68a38e6a8b466c7c97b2e43"
+    },
+    "bug-ticket-writer": {
+      "source": "git@github.com:hao0731/hao-engineering.git",
+      "sourceUrl": "git@github.com:hao0731/hao-engineering.git",
+      "sourceType": "git",
+      "skillPath": "skills/ticket/bug-ticket-writer/SKILL.md",
+      "computedHash": "9906932571fb676566e7cdf30d03445d47d7974f4fd85c62609ee78e2fd77845"
+    },
+    "diagnosing-bugs": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/diagnosing-bugs/SKILL.md",
+      "computedHash": "ede7254edbd22fcab97a0941511f7d440d8f9a249348fea97c50987ad5501674"
+    },
+    "domain-modeling": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/domain-modeling/SKILL.md",
+      "computedHash": "b3eb40152b81f0c98fd2095a023c019452dbdce56f7540cc67fece2972db8369"
+    },
+    "feature-ticket-writer": {
+      "source": "git@github.com:hao0731/hao-engineering.git",
+      "sourceUrl": "git@github.com:hao0731/hao-engineering.git",
+      "sourceType": "git",
+      "skillPath": "skills/ticket/feature-ticket-writer/SKILL.md",
+      "computedHash": "c1d3111bd2f1aa2d99bf8d924df96a0211d0a35dcc9ade6e74ca9d46333e2346"
+    },
+    "grill-with-docs": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/grill-with-docs/SKILL.md",
+      "computedHash": "35e62aa423aaeab6a414bcac273f56dfb17802ef2334b41b6a3b00f28196c8cf"
+    },
+    "grilling": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/productivity/grilling/SKILL.md",
+      "computedHash": "ef1641a2047b71b60f1942cd35efb47d3afc9d584dff5a0b01f8c7db923aaa08"
+    },
+    "handoff": {
+      "source": "git@github.com:hao0731/hao-engineering.git",
+      "sourceUrl": "git@github.com:hao0731/hao-engineering.git",
+      "sourceType": "git",
+      "skillPath": "skills/productivity/handoff/SKILL.md",
+      "computedHash": "3bde7b6cb82db385fa6a7541111f43465859787e5b01f51822edd8bcf2c30f23"
+    },
+    "idea-discussion": {
+      "source": "git@github.com:hao0731/hao-engineering.git",
+      "sourceUrl": "git@github.com:hao0731/hao-engineering.git",
+      "sourceType": "git",
+      "skillPath": "skills/productivity/idea-discussion/SKILL.md",
+      "computedHash": "d220f7af21442e2bd512d52b63ddf46af7d5371e02b56189b4a0619c815807b7"
+    },
+    "implement": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/implement/SKILL.md",
+      "computedHash": "b6371a0a6723bad551f3adc721e3729a6a97acfc3670dc2bdea198bbe78408c0"
+    },
+    "setup-matt-pocock-skills": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/setup-matt-pocock-skills/SKILL.md",
+      "computedHash": "1d35d0afa3ded88c9324d38db08b2cff91cd03e0e11d64786bee41385cd7b9fb"
+    },
+    "tdd": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/tdd/SKILL.md",
+      "computedHash": "daf55026f456af104a72fa43247f7bcec89e5127316dc5b1b8d675d6a9d8ce94"
+    },
+    "to-tickets": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/to-tickets/SKILL.md",
+      "computedHash": "5f871bdc46a9212222214ba399be4965374208af1bd7f48f1271bef72841dd31"
+    },
+    "triage": {
+      "source": "mattpocock/skills",
+      "sourceType": "github",
+      "skillPath": "skills/engineering/triage/SKILL.md",
+      "computedHash": "a683e69163e23630f39c05a50fb9d83a3795a6a6fbd317357669e082cd43a158"
+    }
+  }
+}
