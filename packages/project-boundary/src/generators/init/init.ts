@@ -70,7 +70,17 @@ export async function initGenerator(
       // still refers to the previous identity and must not restore its targets.
       targets: renamed
         ? project.targets
-        : { ...resolved?.targets, ...project.targets },
+        : {
+            ...resolved?.targets,
+            ...Object.fromEntries(
+              Object.entries(project.targets ?? {}).map(([key, target]) => [
+                key,
+                ['check-boundaries', 'check-boundaries-all'].includes(key)
+                  ? mergeTargetConfigurations(target, resolved?.targets?.[key])
+                  : target,
+              ]),
+            ),
+          },
     });
   }
   let root = [...projects.entries()].find(
@@ -128,7 +138,11 @@ export async function initGenerator(
         targetName === 'check-boundaries-all'
           ? (project.targets?.[targetName] ?? (legacy ? existing : undefined))
           : existing;
-      if (selected && selected.executor !== executor)
+      if (
+        selected &&
+        ((selected.executor !== undefined && selected.executor !== executor) ||
+          selected.command !== undefined)
+      )
         throw new Error(
           `${name} target ${targetName} already exists with a different executor`,
         );
@@ -192,18 +206,35 @@ export async function initGenerator(
         legacy &&
         !project.targets?.[targetName];
       const retained = migrating ? effective : (saved ?? {});
-      targets[targetName] = Object.fromEntries(
-        Object.entries({
-          ...retained,
-          executor,
-          cache: false,
-          inputs,
-          options: {
-            ...retained.options,
-            ...(expected === undefined ? {} : { project: expected }),
-          },
-        }).sort(([a], [b]) => a.localeCompare(b)),
-      );
+      const retainedKeys = Object.keys(retained);
+      const spread = retainedKeys.indexOf('...');
+      const optionsBeforeSpread =
+        spread >= 0 &&
+        retainedKeys.indexOf('options') >= 0 &&
+        retainedKeys.indexOf('options') < spread;
+      // Keep authored non-scope keys on their original side of Nx's spread.
+      // Required fields are appended after it so defaults cannot override them.
+      targets[targetName] = {
+        ...Object.fromEntries(
+          Object.entries(retained).filter(
+            ([key]) =>
+              !['executor', 'cache', 'inputs', 'options'].includes(key),
+          ),
+        ),
+        executor,
+        cache: false,
+        inputs,
+        options: {
+          ...Object.fromEntries(
+            Object.entries(
+              optionsBeforeSpread
+                ? (effective.options ?? {})
+                : (retained.options ?? {}),
+            ).filter(([key]) => key !== 'project'),
+          ),
+          ...(expected === undefined ? {} : { project: expected }),
+        },
+      };
     }
     changes.push({ file, package: isPackage, name, targets });
   }

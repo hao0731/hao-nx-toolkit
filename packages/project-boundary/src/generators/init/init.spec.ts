@@ -453,3 +453,110 @@ it('merges explicit legacy configurations with inherited reporting configuration
     local: { outputFile: 'local.json' },
   });
 });
+
+it('preserves spread-relative target settings while enforcing uncached own-source checks', async () => {
+  addProjectConfiguration(tree, 'app', {
+    root: 'apps/app',
+    targets: {
+      'check-boundaries': {
+        defaultConfiguration: 'local',
+        '...': true,
+        executor: '@hao-nx-toolkit/project-boundary:check',
+      } as never,
+    },
+  });
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      'check-boundaries': {
+        defaultConfiguration: 'ci',
+        cache: true,
+        configurations: {
+          ci: { outputFile: 'ci.json' },
+          local: { outputFile: 'local.json' },
+        },
+      },
+    },
+  });
+  await initGenerator(tree);
+  const target = readJson(tree, 'apps/app/project.json').targets[
+    'check-boundaries'
+  ];
+  expect(Object.keys(target).indexOf('defaultConfiguration')).toBeLessThan(
+    Object.keys(target).indexOf('...'),
+  );
+  expect(Object.keys(target).indexOf('cache')).toBeGreaterThan(
+    Object.keys(target).indexOf('...'),
+  );
+  expect(target.cache).toBe(false);
+  expect(target.options.project).toBe('app');
+  const before = tree.read('apps/app/project.json')?.toString();
+  await initGenerator(tree);
+  expect(tree.read('apps/app/project.json')?.toString()).toBe(before);
+});
+
+it('rejects conflicting inferred configurations retained beneath explicit boundary options', async () => {
+  const devkit = require('@nx/devkit') as typeof import('@nx/devkit');
+  const fs = require('node:fs') as typeof import('node:fs');
+  const exists = fs.existsSync;
+  vi.spyOn(fs, 'existsSync').mockImplementation(
+    (path) => path === '/virtual/nx.json' || exists(path),
+  );
+  vi.spyOn(devkit, 'workspaceRoot', 'get').mockReturnValue('/virtual');
+  vi.spyOn(devkit, 'createProjectGraphAsync').mockResolvedValue({
+    nodes: {
+      app: {
+        name: 'app',
+        type: 'app',
+        data: {
+          root: 'apps/app',
+          targets: {
+            'check-boundaries': {
+              executor: '@hao-nx-toolkit/project-boundary:check',
+              defaultConfiguration: 'ci',
+              configurations: { ci: { project: 'other' } },
+            },
+          },
+        },
+      },
+    },
+    dependencies: { app: [] },
+  });
+  addProjectConfiguration(tree, 'app', {
+    root: 'apps/app',
+    targets: {
+      'check-boundaries': {
+        executor: '@hao-nx-toolkit/project-boundary:check',
+        options: { project: 'app' },
+      },
+    },
+  });
+  const before = tree.listChanges();
+  vi.resetModules();
+  const initialize = (await import('./init.js')).initGenerator;
+  await expect(initialize(tree)).rejects.toThrow(
+    'conflicting configuration project selector',
+  );
+  expect(tree.listChanges()).toEqual(before);
+});
+
+it('accepts a compatible executor inherited through target defaults', async () => {
+  addProjectConfiguration(tree, 'app', {
+    root: 'apps/app',
+    targets: { 'check-boundaries': { options: { project: 'app' } } },
+  });
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      'check-boundaries': {
+        executor: '@hao-nx-toolkit/project-boundary:check',
+      },
+    },
+  });
+  await initGenerator(tree);
+  expect(
+    readJson(tree, 'apps/app/project.json').targets['check-boundaries'],
+  ).toMatchObject({
+    executor: '@hao-nx-toolkit/project-boundary:check',
+    cache: false,
+    options: { project: 'app' },
+  });
+});
