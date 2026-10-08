@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Project boundary configuration",
+  "description": "Direct project dependency constraints. Regex patterns use /expression/ without flags; runtime validates expressions.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "depConstraints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/constraint"
+      }
+    }
+  },
+  "required": ["depConstraints"],
+  "definitions": {
+    "tag": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tagList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/tag"
+      }
+    },
+    "constraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceTag": {
+          "$ref": "#/definitions/tag"
+        },
+        "allSourceTags": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/tagList"
+            }
+          ],
+          "minItems": 1
+        },
+        "onlyDependOnProjectsWithTags": {
+          "$ref": "#/definitions/tagList"
+        },
+        "notDependOnProjectsWithTags": {
+          "$ref": "#/definitions/tagList"
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["sourceTag"]
+        },
+        {
+          "required": ["allSourceTags"]
+        }
+      ]
+    }
+  }
+}

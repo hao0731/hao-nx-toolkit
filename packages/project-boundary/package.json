@@ -17,7 +17,8 @@
   "files": [
     "dist",
     "!**/*.tsbuildinfo",
-    "executors.json"
+    "executors.json",
+    "generators.json"
   ],
   "nx": {
     "name": "project-boundary",
@@ -57,5 +58,6 @@
     "@nx/devkit": "23.2.0",
     "tslib": "^2.3.0"
   },
-  "executors": "./executors.json"
+  "executors": "./executors.json",
+  "generators": "./generators.json"
 }
