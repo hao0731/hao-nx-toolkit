@@ -52,13 +52,21 @@
     }
   ],
   "release": {
-    "projects": ["!utils", "!@org/source"],
+    "projects": ["*", "!utils", "!@org/source"],
     "version": {
       "preVersionCommand": "npx nx run-many -t build"
     }
   },
   "targetDefaults": {
     "test": {
+      "dependsOn": ["^build"]
+    },
+    "@nx/js:tsc": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    },
+    "e2e": {
       "dependsOn": ["^build"]
     }
   },

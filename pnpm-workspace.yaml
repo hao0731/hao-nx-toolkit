@@ -1,5 +1,8 @@
 packages:
   - 'packages/*'
+  - 'e2e/*'
 allowBuilds:
   '@parcel/watcher': true
   unrs-resolver: true
+  '@swc/core': false
+  nx: true

@@ -1,0 +1,31 @@
+{
+  "name": "project-boundary-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "projectType": "application",
+    "sourceRoot": "e2e/project-boundary-e2e/src",
+    "implicitDependencies": [
+      "project-boundary"
+    ],
+    "tags": [
+      "role:testing"
+    ],
+    "targets": {
+      "e2e": {
+        "executor": "@nx/vitest:test",
+        "outputs": [
+          "{options.reportsDirectory}"
+        ],
+        "dependsOn": [
+          "^build"
+        ],
+        "options": {
+          "reportsDirectory": "coverage/e2e/project-boundary-e2e",
+          "maxWorkers": 1,
+          "isolate": false
+        }
+      }
+    }
+  }
+}

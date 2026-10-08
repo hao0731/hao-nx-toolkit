@@ -13,11 +13,16 @@
     "@nx/vite": "23.2.0",
     "@nx/vitest": "23.2.0",
     "@nx/web": "23.2.0",
+    "@swc-node/register": "~1.11.1",
+    "@swc/cli": "~0.8.1",
+    "@swc/core": "~1.15.5",
+    "@swc/helpers": "~0.5.18",
     "@types/node": "24.13.3",
     "@vitest/coverage-v8": "~4.1.10",
     "@vitest/ui": "~4.1.10",
     "eslint": "~10.6.0",
     "jiti": "2.4.2",
+    "jsdom": "^27.1.0",
     "jsonc-eslint-parser": "^2.1.0",
     "nx": "23.2.0",
     "prettier": "^3.8.1",
@@ -40,5 +45,8 @@
         }
       }
     }
+  },
+  "dependencies": {
+    "@nx/devkit": "23.2.0"
   }
 }
