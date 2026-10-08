@@ -59,5 +59,11 @@
     "tslib": "^2.3.0"
   },
   "executors": "./executors.json",
-  "generators": "./generators.json"
+  "generators": "./generators.json",
+  "devDependencies": {
+    "nx": "23.2.0"
+  },
+  "peerDependencies": {
+    "nx": "23.2.0"
+  }
 }

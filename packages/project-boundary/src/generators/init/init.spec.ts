@@ -271,3 +271,185 @@ it('preserves package metadata when a root project.json coexists', async () => {
     },
   });
 });
+
+it('rejects wildcard defaults that select another project before writes', async () => {
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      'check-*': {
+        defaultConfiguration: 'ci',
+        configurations: { ci: { project: 'other' } },
+      },
+    },
+  });
+  addProjectConfiguration(tree, 'app', { root: 'apps/app' });
+  addProjectConfiguration(tree, 'other', { root: 'apps/other' });
+  const before = tree.listChanges();
+  await expect(initGenerator(tree)).rejects.toThrow(
+    'conflicting configuration project selector',
+  );
+  expect(tree.listChanges()).toEqual(before);
+});
+
+it('preserves inherited default and named workspace reporting configurations during migration', async () => {
+  writeJson(tree, 'package.json', {
+    name: 'workspace',
+    nx: {
+      targets: {
+        'check-boundaries': {
+          executor: '@hao-nx-toolkit/project-boundary:check',
+        },
+      },
+    },
+  });
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      'check-boundaries': {
+        inputs: ['{projectRoot}/custom.txt'],
+        defaultConfiguration: 'ci',
+        configurations: {
+          ci: { outputFile: 'reports/ci.json' },
+          manual: { outputFile: 'reports/manual.json' },
+        },
+      },
+    },
+  });
+  await initGenerator(tree);
+  expect(
+    readJson(tree, 'package.json').nx.targets['check-boundaries-all'],
+  ).toMatchObject({
+    defaultConfiguration: 'ci',
+    configurations: {
+      ci: { outputFile: 'reports/ci.json' },
+      manual: { outputFile: 'reports/manual.json' },
+    },
+    inputs: [
+      '{projectRoot}/custom.txt',
+      'default',
+      '{workspaceRoot}/project-boundary.config.json',
+    ],
+  });
+});
+
+it('applies filtered defaults in Nx precedence while leaving normal settings dynamic', async () => {
+  addProjectConfiguration(tree, 'app', {
+    root: 'apps/app',
+    tags: ['scope:app'],
+  });
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      '@hao-nx-toolkit/project-boundary:check': [
+        { filter: { projects: ['other'] }, options: { project: 'wrong' } },
+      ],
+      'check-boundaries': [
+        { filter: { plugin: 'other-plugin' }, options: { project: 'wrong' } },
+        {
+          filter: {
+            projects: ['tag:scope:app'],
+            executor: '@hao-nx-toolkit/project-boundary:check',
+          },
+          inputs: ['{projectRoot}/first.txt'],
+          configurations: { ci: { outputFile: 'first.json' } },
+        },
+        {
+          filter: { projects: ['app'] },
+          inputs: ['{projectRoot}/second.txt'],
+          configurations: { ci: { outputFile: 'second.json' } },
+        },
+      ],
+      'check-*': { options: { project: 'wrong' } },
+    },
+  });
+  // Root doesn't match the exact-key entries, so its wildcard fallback is unsafe.
+  const before = tree.listChanges();
+  await expect(initGenerator(tree)).rejects.toThrow(
+    'conflicting project selector',
+  );
+  expect(tree.listChanges()).toEqual(before);
+  writeJson(tree, 'nx.json', {
+    ...readJson(tree, 'nx.json'),
+    targetDefaults: {
+      ...readJson(tree, 'nx.json').targetDefaults,
+      'check-*': {},
+    },
+  });
+  await initGenerator(tree);
+  const target = readJson(tree, 'apps/app/project.json').targets[
+    'check-boundaries'
+  ];
+  expect(target.inputs).toEqual([
+    '{projectRoot}/second.txt',
+    'default',
+    '{workspaceRoot}/project-boundary.config.json',
+  ]);
+  expect(target.options).toEqual({ project: 'app' });
+  expect(target.configurations).toBeUndefined();
+  expect(target.defaultConfiguration).toBeUndefined();
+});
+
+it('rejects matched filtered default configurations using inferred tags', async () => {
+  const devkit = require('@nx/devkit') as typeof import('@nx/devkit');
+  const fs = require('node:fs') as typeof import('node:fs');
+  const exists = fs.existsSync;
+  vi.spyOn(fs, 'existsSync').mockImplementation(
+    (path) => path === '/virtual/nx.json' || exists(path),
+  );
+  vi.spyOn(devkit, 'workspaceRoot', 'get').mockReturnValue('/virtual');
+  vi.spyOn(devkit, 'createProjectGraphAsync').mockResolvedValue({
+    nodes: {
+      app: {
+        name: 'app',
+        type: 'app',
+        data: { root: 'apps/app', tags: ['scope:inferred'] },
+      },
+    },
+    dependencies: { app: [] },
+  });
+  addProjectConfiguration(tree, 'app', {
+    root: 'apps/app',
+    tags: ['scope:explicit'],
+  });
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      'check-boundaries': [
+        {
+          filter: { projects: ['tag:scope:inferred'] },
+          configurations: { ci: { project: 'other' } },
+        },
+      ],
+    },
+  });
+  const before = tree.listChanges();
+  vi.resetModules();
+  const initialize = (await import('./init.js')).initGenerator;
+  await expect(initialize(tree)).rejects.toThrow(
+    'conflicting configuration project selector',
+  );
+  expect(tree.listChanges()).toEqual(before);
+});
+
+it('merges explicit legacy configurations with inherited reporting configurations', async () => {
+  writeJson(tree, 'package.json', {
+    name: 'workspace',
+    nx: {
+      targets: {
+        'check-boundaries': {
+          executor: '@hao-nx-toolkit/project-boundary:check',
+          configurations: { local: { outputFile: 'local.json' } },
+        },
+      },
+    },
+  });
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      'check-boundaries': { configurations: { ci: { outputFile: 'ci.json' } } },
+    },
+  });
+  await initGenerator(tree);
+  expect(
+    readJson(tree, 'package.json').nx.targets['check-boundaries-all']
+      .configurations,
+  ).toEqual({
+    ci: { outputFile: 'ci.json' },
+    local: { outputFile: 'local.json' },
+  });
+});

@@ -13,6 +13,10 @@ import {
 import { existsSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import type { InitGeneratorSchema } from './schema';
+import {
+  readTargetDefaultsForTarget,
+  mergeTargetConfigurations,
+} from './target-defaults';
 
 type StoredProject = {
   name?: string;
@@ -61,6 +65,7 @@ export async function initGenerator(
     projects.set(name, {
       ...resolved,
       ...project,
+      tags: [...new Set([...(resolved?.tags ?? []), ...(project.tags ?? [])])],
       // A pending rename owns its explicit target selection; the disk graph
       // still refers to the previous identity and must not restore its targets.
       targets: renamed
@@ -119,17 +124,48 @@ export async function initGenerator(
       'check-boundaries',
       ...(name === rootName ? ['check-boundaries-all'] : []),
     ]) {
-      const current =
+      const selected =
         targetName === 'check-boundaries-all'
           ? (project.targets?.[targetName] ?? (legacy ? existing : undefined))
           : existing;
-      if (current && current.executor !== executor)
+      if (selected && selected.executor !== executor)
         throw new Error(
           `${name} target ${targetName} already exists with a different executor`,
         );
-      const inherited = defaults[executor] ?? defaults[targetName] ?? {};
+      const lookup = (key: string) =>
+        readTargetDefaultsForTarget(key, defaults, executor, {
+          projectName: name,
+          projectNode: {
+            name,
+            type: project.projectType === 'application' ? 'app' : 'lib',
+            data: project,
+          },
+          // Explicit generated targets originate in Nx's default project/package plugins.
+        }) ?? {};
+      const inherited = lookup(targetName);
+      const current =
+        targetName === 'check-boundaries-all' &&
+        legacy &&
+        !project.targets?.[targetName]
+          ? mergeTargetConfigurations(
+              { executor, ...selected },
+              { executor, ...lookup('check-boundaries') },
+            )
+          : selected;
       const expected = targetName === 'check-boundaries' ? name : undefined;
-      for (const candidate of [current, inherited]) {
+      const saved =
+        persisted.targets?.[targetName] ??
+        (targetName === 'check-boundaries-all' && legacy
+          ? persisted.targets?.['check-boundaries']
+          : undefined);
+      const effective = mergeTargetConfigurations(
+        { executor, ...saved },
+        mergeTargetConfigurations(
+          { executor, ...current },
+          { executor, ...inherited },
+        ),
+      );
+      for (const candidate of [effective]) {
         if (
           candidate?.options?.project !== undefined &&
           candidate.options.project !== expected
@@ -148,30 +184,26 @@ export async function initGenerator(
               `${name} target ${targetName} has a conflicting configuration project selector`,
             );
       }
-      const saved =
-        persisted.targets?.[targetName] ??
-        (targetName === 'check-boundaries-all' && legacy
-          ? persisted.targets?.['check-boundaries']
-          : undefined);
-      const inputs = [
-        ...(saved?.inputs ??
-          current?.inputs ??
-          inherited.inputs ?? ['default']),
-      ];
+      const inputs = [...(effective.inputs ?? ['default'])];
       if (!inputs.includes('default')) inputs.push('default');
       if (!inputs.includes(policyInput)) inputs.push(policyInput);
-      targets[targetName] = {
-        ...saved,
-        executor,
-        cache: false,
-        inputs,
-        options: {
-          ...inherited.options,
-          ...current?.options,
-          ...saved?.options,
-          ...(expected === undefined ? {} : { project: expected }),
-        },
-      };
+      const migrating =
+        targetName === 'check-boundaries-all' &&
+        legacy &&
+        !project.targets?.[targetName];
+      const retained = migrating ? effective : (saved ?? {});
+      targets[targetName] = Object.fromEntries(
+        Object.entries({
+          ...retained,
+          executor,
+          cache: false,
+          inputs,
+          options: {
+            ...retained.options,
+            ...(expected === undefined ? {} : { project: expected }),
+          },
+        }).sort(([a], [b]) => a.localeCompare(b)),
+      );
     }
     changes.push({ file, package: isPackage, name, targets });
   }

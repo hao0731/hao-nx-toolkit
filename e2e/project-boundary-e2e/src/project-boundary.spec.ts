@@ -677,3 +677,136 @@ module.exports.createNodesV2 = ['**/inferred.marker', async (files) => files.map
     ]),
   });
 }, 120_000);
+
+it('rejects effective wildcard and filtered source conflicts transactionally and migrates inherited reporting configurations', async () => {
+  const files = [
+    'package.json',
+    'project-boundary.config.json',
+    'apps/app/project.json',
+    'libs/lib/project.json',
+    'libs/downstream/project.json',
+    'apps/incoming/project.json',
+    'apps/sibling/project.json',
+    'projects/inferred/project.json',
+    'packages/packaged/package.json',
+  ];
+  const nxSettings = read('nx.json');
+  for (const targetDefaults of [
+    {
+      'check-*': {
+        defaultConfiguration: 'ci',
+        configurations: { ci: { project: 'other' } },
+      },
+    },
+    {
+      'check-boundaries': [
+        { filter: { projects: ['missing'] }, options: { project: 'other' } },
+        {
+          filter: {
+            projects: ['tag:scope:app'],
+            executor: '@hao-nx-toolkit/project-boundary:check',
+          },
+          configurations: { ci: { project: 'lib' } },
+        },
+      ],
+    },
+  ]) {
+    json('nx.json', { ...nxSettings, targetDefaults });
+    const before = files.map((file) =>
+      readFileSync(join(consumer, file), 'utf8'),
+    );
+    const rejected = await pnpm([
+      'nx',
+      'g',
+      '@hao-nx-toolkit/project-boundary:init',
+      '--no-interactive',
+    ]);
+    expect(rejected.code, rejected.text).toBe(1);
+    expect(rejected.text).toContain(
+      'conflicting configuration project selector',
+    );
+    expect(
+      files.map((file) => readFileSync(join(consumer, file), 'utf8')),
+    ).toEqual(before);
+  }
+  const root = read('package.json');
+  root.nx.targets['check-boundaries'] = {
+    executor: '@hao-nx-toolkit/project-boundary:check',
+    configurations: {
+      explicit: { outputFile: 'reports/migrated-explicit.json' },
+    },
+  };
+  delete root.nx.targets['check-boundaries-all'];
+  json('package.json', root);
+  json('project-boundary.config.json', {
+    depConstraints: [{ sourceTag: '*' }],
+  });
+  json('nx.json', {
+    ...nxSettings,
+    targetDefaults: {
+      'check-boundaries': [
+        {
+          filter: { plugin: 'unrelated-inference-plugin' },
+          options: { project: 'wrong' },
+        },
+        {
+          filter: { projects: ['boundary-fixture'] },
+          defaultConfiguration: 'ci',
+          inputs: ['{projectRoot}/custom.txt'],
+          configurations: {
+            ci: { outputFile: 'reports/migrated-default.json' },
+            manual: { outputFile: 'reports/migrated-manual.json' },
+          },
+        },
+      ],
+    },
+  });
+  const migrated = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(migrated.code, migrated.text).toBe(0);
+  expect(read('package.json').nx.targets['check-boundaries-all']).toMatchObject(
+    {
+      defaultConfiguration: 'ci',
+      inputs: [
+        '{projectRoot}/custom.txt',
+        'default',
+        '{workspaceRoot}/project-boundary.config.json',
+      ],
+      configurations: {
+        ci: { outputFile: 'reports/migrated-default.json' },
+        manual: { outputFile: 'reports/migrated-manual.json' },
+        explicit: { outputFile: 'reports/migrated-explicit.json' },
+      },
+    },
+  );
+  for (const [configuration, file] of [
+    [undefined, 'default'],
+    ['manual', 'manual'],
+    ['explicit', 'explicit'],
+  ]) {
+    const result = await pnpm([
+      'nx',
+      'run',
+      'boundary-fixture:check-boundaries-all',
+      ...(configuration ? [`--configuration=${configuration}`] : []),
+    ]);
+    expect(result.code, result.text).toBe(0);
+    expect(read(`reports/migrated-${file}.json`)).toMatchObject({
+      scope: { kind: 'workspace' },
+      success: true,
+    });
+  }
+  const before = readFileSync(join(consumer, 'package.json'), 'utf8');
+  const repeated = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(repeated.code, repeated.text).toBe(0);
+  expect(readFileSync(join(consumer, 'package.json'), 'utf8')).toBe(before);
+}, 60_000);
