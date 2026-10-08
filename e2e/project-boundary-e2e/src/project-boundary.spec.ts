@@ -1,73 +1,343 @@
-import { execSync } from 'child_process';
-import { join, dirname } from 'path';
-import { mkdirSync, rmSync } from 'fs';
+import { execFile } from 'node:child_process';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
-describe('project-boundary', () => {
-  let projectDirectory: string;
+const execute = promisify(execFile);
+const repository = fileURLToPath(new URL('../../../', import.meta.url));
+let temporary: string;
+let consumer: string;
+let environment: NodeJS.ProcessEnv;
+let sourceManifest: string;
+let sourceLock: string;
 
-  // This hook shells out synchronously twice, so its budget has to cover both
-  // installs on a cold package manager cache. Otherwise work that succeeded
-  // still fails on return.
-  beforeAll(() => {
-    projectDirectory = createTestProject();
-
-    // The plugin has been built and published to a local registry in the globalSetup
-    // Install the plugin built with the latest source code into the test repo
-    execSync(
-      `pnpm add -Dw --config.frozen-lockfile=false @hao-nx-toolkit/project-boundary@e2e`,
-      {
-        cwd: projectDirectory,
-        stdio: 'inherit',
-        env: process.env,
-      },
-    );
-  }, 300_000);
-
-  afterAll(() => {
-    if (projectDirectory) {
-      // Cleanup the test project
-      rmSync(projectDirectory, {
-        recursive: true,
-        force: true,
-      });
-    }
-  });
-
-  it('should be installed', () => {
-    // npm ls will fail if the package is not installed properly
-    execSync('pnpm ls --depth 100 @hao-nx-toolkit/project-boundary', {
-      cwd: projectDirectory,
-      stdio: 'inherit',
+function json(path: string, value: unknown) {
+  mkdirSync(join(consumer, path, '..'), { recursive: true });
+  writeFileSync(join(consumer, path), `${JSON.stringify(value, null, 2)}\n`);
+}
+function read(path: string) {
+  return JSON.parse(readFileSync(join(consumer, path), 'utf8'));
+}
+async function pnpm(args: string[], cwd = consumer) {
+  try {
+    const result = await execute('pnpm', args, {
+      cwd,
+      env: environment,
+      timeout: 180_000,
+      maxBuffer: 16 * 1024 * 1024,
     });
+    return { code: 0, text: result.stdout + result.stderr };
+  } catch (error) {
+    const failure = error as Error & {
+      code: number | string;
+      stdout?: string;
+      stderr?: string;
+    };
+    return {
+      code: failure.code,
+      text: `${failure.stdout ?? ''}${failure.stderr ?? ''}${failure.message}`,
+    };
+  }
+}
+function policy() {
+  json('project-boundary.config.json', {
+    depConstraints: [
+      {
+        sourceTag: 'scope:app',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+      {
+        sourceTag: 'scope:shared',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+      {
+        sourceTag: 'scope:legacy',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+    ],
   });
+}
+
+beforeAll(async () => {
+  sourceManifest = readFileSync(
+    join(repository, 'packages/project-boundary/package.json'),
+    'utf8',
+  );
+  sourceLock = readFileSync(join(repository, 'pnpm-lock.yaml'), 'utf8');
+  temporary = mkdtempSync(join(tmpdir(), 'project-boundary-e2e-'));
+  consumer = join(temporary, 'consumer');
+  mkdirSync(consumer);
+  const npmrc = join(consumer, '.npmrc');
+  writeFileSync(
+    npmrc,
+    `registry=https://registry.npmjs.org/\nstore-dir=${join(temporary, 'store')}\n`,
+  );
+  environment = {
+    ...process.env,
+    npm_config_userconfig: npmrc,
+    NX_DAEMON: 'false',
+    NX_ISOLATE_PLUGINS: 'false',
+    NX_NO_CLOUD: 'true',
+    FORCE_COLOR: '0',
+  };
+  const tarball = join(temporary, 'project-boundary.tgz');
+  const packed = await pnpm(
+    ['pack', '--out', tarball],
+    join(repository, 'packages/project-boundary'),
+  );
+  expect(packed.code, packed.text).toBe(0);
+  json('package.json', {
+    name: 'boundary-fixture',
+    private: true,
+    devDependencies: {
+      nx: '23.2.0',
+      '@nx/js': '23.2.0',
+      typescript: '~6.0.3',
+      '@hao-nx-toolkit/project-boundary': `file:${tarball}`,
+    },
+  });
+  json('nx.json', { analytics: false, neverConnectToCloud: true });
+  writeFileSync(
+    join(consumer, 'pnpm-workspace.yaml'),
+    `packages: []\nstoreDir: ${JSON.stringify(join(temporary, 'store'))}\nallowBuilds:\n  nx: true\n`,
+  );
+  const installed = await pnpm([
+    'install',
+    '--no-frozen-lockfile',
+    '--store-dir',
+    join(temporary, 'store'),
+  ]);
+  expect(installed.code, installed.text).toBe(0);
+}, 240_000);
+
+afterAll(() => {
+  try {
+    expect(
+      readFileSync(
+        join(repository, 'packages/project-boundary/package.json'),
+        'utf8',
+      ),
+    ).toBe(sourceManifest);
+    expect(readFileSync(join(repository, 'pnpm-lock.yaml'), 'utf8')).toBe(
+      sourceLock,
+    );
+  } finally {
+    if (temporary) rmSync(temporary, { recursive: true, force: true });
+  }
 });
 
-/**
- * Creates a test project with create-nx-workspace and installs the plugin
- * @returns The directory where the test project was created
- */
-function createTestProject() {
-  const projectName = 'test-project';
-  const projectDirectory = join(process.cwd(), 'tmp', projectName);
-
-  // Ensure projectDirectory is empty
-  rmSync(projectDirectory, {
-    recursive: true,
-    force: true,
+it('installs the packaged plugin and initializes a runnable uncached root target with an editor schema', async () => {
+  expect(
+    read('node_modules/@hao-nx-toolkit/project-boundary/package.json').version,
+  ).toBe(JSON.parse(sourceManifest).version);
+  const initialized = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(initialized.code, initialized.text).toBe(0);
+  expect(read('package.json').nx.targets['check-boundaries']).toEqual({
+    executor: '@hao-nx-toolkit/project-boundary:check',
+    cache: false,
   });
-  mkdirSync(dirname(projectDirectory), {
-    recursive: true,
-  });
-
-  execSync(
-    `pnpm dlx create-nx-workspace@latest ${projectName} --preset apps --nxCloud=skip --no-interactive`,
-    {
-      cwd: dirname(projectDirectory),
-      stdio: 'inherit',
-      env: process.env,
-    },
+  const configuration = read('project-boundary.config.json');
+  expect(configuration.depConstraints).toEqual([]);
+  expect(read(configuration.$schema).title).toBe(
+    'Project boundary configuration',
   );
-  console.log(`Created test project in "${projectDirectory}"`);
+  const check = await pnpm(['nx', 'run', 'boundary-fixture:check-boundaries']);
+  expect(check.code, check.text).toBe(0);
+}, 60_000);
 
-  return projectDirectory;
-}
+it('preserves customized policy on repeat initialization and checks actual static, dynamic, and implicit graph edges', async () => {
+  for (const [name, root, tag] of [
+    ['app', 'apps/app', 'scope:app'],
+    ['lib', 'libs/lib', 'scope:shared'],
+    ['downstream', 'libs/downstream', 'scope:restricted'],
+    ['incoming', 'apps/incoming', 'scope:legacy'],
+  ]) {
+    json(`${root}/project.json`, {
+      name,
+      root,
+      tags: [tag],
+      ...(name === 'incoming' ? { implicitDependencies: ['app'] } : {}),
+    });
+  }
+  json('tsconfig.base.json', {
+    compilerOptions: {
+      baseUrl: '.',
+      paths: {
+        '@fixture/lib': ['libs/lib/index.ts'],
+        '@fixture/downstream': ['libs/downstream/index.ts'],
+      },
+    },
+  });
+  writeFileSync(
+    join(consumer, 'apps/app/index.ts'),
+    "import { value } from '@fixture/lib'; console.log(value);\n",
+  );
+  writeFileSync(
+    join(consumer, 'libs/lib/index.ts'),
+    "export const value = 1; export const load = () => import('@fixture/downstream');\n",
+  );
+  writeFileSync(
+    join(consumer, 'libs/downstream/index.ts'),
+    'export const downstream = 1;\n',
+  );
+  policy();
+  const before = readFileSync(
+    join(consumer, 'project-boundary.config.json'),
+    'utf8',
+  );
+  const repeated = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(repeated.code, repeated.text).toBe(0);
+  expect(
+    readFileSync(join(consumer, 'project-boundary.config.json'), 'utf8'),
+  ).toBe(before);
+  const graphResult = await pnpm(['nx', 'graph', '--print']);
+  expect(graphResult.code, graphResult.text).toBe(0);
+  // Nx graph --print emits its JSON to stdout; command output may include stderr diagnostics.
+  const graphStart = graphResult.text.indexOf('{');
+  const graphEnd = graphResult.text.lastIndexOf('}');
+  const graph = JSON.parse(
+    graphResult.text.slice(graphStart, graphEnd + 1),
+  ).graph;
+  expect(graph.dependencies.app).toContainEqual(
+    expect.objectContaining({ target: 'lib', type: 'static' }),
+  );
+  expect(graph.dependencies.lib).toContainEqual(
+    expect.objectContaining({ target: 'downstream', type: 'dynamic' }),
+  );
+  expect(graph.dependencies.incoming).toContainEqual(
+    expect.objectContaining({ target: 'app', type: 'implicit' }),
+  );
+}, 60_000);
+
+it('fails workspace violations with readable JSON diagnostics while a selected source ignores incoming and downstream violations', async () => {
+  const workspace = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries',
+    '--',
+    '--outputFile=reports/workspace.json',
+  ]);
+  expect(workspace.code, workspace.text).toBe(1);
+  expect(workspace.text).toContain('lib → downstream');
+  expect(workspace.text).toContain('scope:restricted');
+  expect(read('reports/workspace.json')).toMatchObject({
+    version: 1,
+    scope: { kind: 'workspace' },
+    success: false,
+  });
+  expect(read('reports/workspace.json').violations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        source: 'lib',
+        target: 'downstream',
+        dependencyType: 'dynamic',
+      }),
+      expect.objectContaining({
+        source: 'incoming',
+        target: 'app',
+        dependencyType: 'implicit',
+      }),
+    ]),
+  );
+  const selected = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries',
+    '--',
+    '--project=app',
+    '--outputFile=reports/app.json',
+  ]);
+  expect(selected.code, selected.text).toBe(0);
+  expect(read('reports/app.json')).toMatchObject({
+    scope: { kind: 'project', project: 'app' },
+    success: true,
+    violations: [],
+  });
+  const violating = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries',
+    '--',
+    '--project=lib',
+  ]);
+  expect(violating.code, violating.text).toBe(1);
+  expect(violating.text).toContain('lib → downstream');
+}, 60_000);
+
+it('passes the workspace after explicit policy fixes and reports unknown-project and invalid-policy failures', async () => {
+  json('project-boundary.config.json', {
+    depConstraints: [
+      {
+        sourceTag: 'scope:app',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+      {
+        sourceTag: 'scope:shared',
+        onlyDependOnProjectsWithTags: ['scope:restricted'],
+      },
+      {
+        sourceTag: 'scope:legacy',
+        onlyDependOnProjectsWithTags: ['scope:app'],
+      },
+    ],
+  });
+  const passing = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries',
+  ]);
+  expect(passing.code, passing.text).toBe(0);
+  const unknown = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries',
+    '--',
+    '--project=unknown',
+    '--outputFile=reports/error.json',
+  ]);
+  expect(unknown.code, unknown.text).toBe(1);
+  expect(read('reports/error.json').errors).toContainEqual({
+    kind: 'configuration',
+    message: 'Unknown project: unknown',
+  });
+  json('project-boundary.config.json', {
+    depConstraints: [],
+    exclusions: ['app'],
+  });
+  const unsupported = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries',
+  ]);
+  expect(unsupported.code, unsupported.text).toBe(1);
+  expect(unsupported.text).toContain(
+    'Unsupported configuration field: exclusions',
+  );
+  json('project-boundary.config.json', {
+    depConstraints: [
+      { sourceTag: 'unused', notDependOnProjectsWithTags: ['/[/'] },
+    ],
+  });
+  const regex = await pnpm(['nx', 'run', 'boundary-fixture:check-boundaries']);
+  expect(regex.code, regex.text).toBe(1);
+  expect(regex.text).toContain('Configuration error');
+  expect(regex.text).toContain('regular expression');
+}, 60_000);

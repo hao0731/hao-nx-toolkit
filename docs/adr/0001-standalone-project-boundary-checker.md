@@ -22,3 +22,13 @@ Provide `project-boundary` as an independent checker using Nx's project graph an
 - [Nx tag-based boundary configuration](https://nx.dev/docs/features/enforce-module-boundaries)
 
 This record captures the design decisions accepted when implementation was requested.
+
+## Execution and verification
+
+The root `check-boundaries` target uses `@hao-nx-toolkit/project-boundary:check` with caching disabled. On Nx 23.2.0, project selection must be forwarded after the CLI separator: `pnpm nx run <root-project>:check-boundaries -- --project=my-app`. Without the separator, Nx consumes `--project` as its own target-selection option.
+
+The initializer preserves existing policy bytes, keeps matching target options, and rejects conflicting executors. Its empty initial constraint list grants no permissions; consumers explicitly define their tag policy. Source-only constraints impose no target restriction. An empty allow list permits no project targets, while an empty deny list forbids none. Regex syntax is `/expression/` without flags; all regex patterns are validated before evaluating the selected graph scope.
+
+Reports use version 1 with scope, success, violations, and errors. Configuration failures update an existing report to a failed result when output remains writable. Report write failures fail the task. The input configuration is protected from report output collisions.
+
+The dedicated `project-boundary-e2e` project uses `kind:workspace` and `role:testing`. It installs a packed package into a temporary Nx 23.2.0 consumer and exercises public CLI behavior against actual static, dynamic, and implicit project graph edges. Its isolated configuration avoids registry setup that changes repository package versions or global npm settings. Both E2E entry points depend on the plugin build and run without task caching.
