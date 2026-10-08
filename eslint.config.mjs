@@ -21,22 +21,31 @@ export default [
           enforceBuildableLibDependency: true,
           allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
           depConstraints: [
+            // Classification and role constraints both apply (AND).
             {
-              sourceTag: 'type:shared',
-              onlyDependOnLibsWithTags: ['type:shared']
+              sourceTag: 'scope:shared',
+              onlyDependOnLibsWithTags: ['scope:shared'],
             },
             {
-              sourceTag: 'scope:workspace',
-              onlyDependOnLibsWithTags: ['type:shared', 'scope:workspace']
+              sourceTag: 'kind:workspace',
+              onlyDependOnLibsWithTags: ['scope:shared', 'kind:workspace'],
             },
             {
               sourceTag: 'lang:golang',
-              onlyDependOnLibsWithTags: ['type:shared', 'lang:golang']
+              onlyDependOnLibsWithTags: ['scope:shared', 'lang:golang'],
             },
             {
               sourceTag: 'lang:typescript',
-              onlyDependOnLibsWithTags: ['type:shared', 'lang:typescript']
-            }
+              onlyDependOnLibsWithTags: ['scope:shared', 'lang:typescript'],
+            },
+            {
+              sourceTag: 'role:production',
+              onlyDependOnLibsWithTags: ['role:production'],
+            },
+            {
+              sourceTag: 'role:testing',
+              onlyDependOnLibsWithTags: ['role:production', 'role:testing'],
+            },
           ],
         },
       ],
