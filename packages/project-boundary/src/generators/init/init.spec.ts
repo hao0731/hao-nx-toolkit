@@ -1,18 +1,30 @@
+import { vi } from 'vitest';
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
-import { readJson, writeJson, type Tree } from '@nx/devkit';
+import {
+  addProjectConfiguration,
+  readJson,
+  writeJson,
+  type Tree,
+} from '@nx/devkit';
 import initGenerator from './init';
 
+afterEach(() => vi.restoreAllMocks());
 let tree: Tree;
 beforeEach(() => {
   tree = createTreeWithEmptyWorkspace();
 });
 
-it('initializes one uncached root target and a fail-closed configuration', async () => {
+it('initializes uncached project and workspace targets and a fail-closed configuration', async () => {
   await initGenerator(tree, {});
   const config = readJson(tree, 'project-boundary.config.json');
   expect(config.depConstraints).toEqual([]);
   expect(readJson(tree, 'package.json').nx.targets['check-boundaries']).toEqual(
-    { executor: '@hao-nx-toolkit/project-boundary:check', cache: false },
+    {
+      executor: '@hao-nx-toolkit/project-boundary:check',
+      cache: false,
+      inputs: ['default', '{workspaceRoot}/project-boundary.config.json'],
+      options: { project: '@proj/source' },
+    },
   );
   expect(tree.children('libs')).toEqual([]);
 });
@@ -48,7 +60,7 @@ it('preserves existing config bytes, unrelated package settings, and matching ta
       tags: ['existing'],
       targets: {
         build: { command: 'echo build' },
-        'check-boundaries': {
+        'check-boundaries-all': {
           cache: false,
           options: { outputFile: 'report.json' },
         },
@@ -64,7 +76,7 @@ it('updates the existing root project.json without creating duplicate package me
     targets: { build: { command: 'echo build' } },
   });
   await initGenerator(tree, {});
-  expect(readJson(tree, 'project.json').targets).toEqual({
+  expect(readJson(tree, 'project.json').targets).toMatchObject({
     build: { command: 'echo build' },
     'check-boundaries': {
       executor: '@hao-nx-toolkit/project-boundary:check',
@@ -112,4 +124,150 @@ it('keeps existing root Nx metadata names and rejects unsupported initialization
   await expect(
     initGenerator(tree, { name: 'another' } as never),
   ).rejects.toThrow('does not accept options');
+});
+
+it('configures native affected project targets and a separate workspace target', async () => {
+  addProjectConfiguration(tree, 'app', {
+    root: 'apps/app',
+    targets: { build: { command: 'echo build' } },
+  });
+  await initGenerator(tree);
+  expect(readJson(tree, 'apps/app/project.json').targets).toMatchObject({
+    build: { command: 'echo build' },
+    'check-boundaries': {
+      executor: '@hao-nx-toolkit/project-boundary:check',
+      cache: false,
+      inputs: ['default', '{workspaceRoot}/project-boundary.config.json'],
+      options: { project: 'app' },
+    },
+  });
+  expect(
+    readJson(tree, 'package.json').nx.targets['check-boundaries-all'].options
+      ?.project,
+  ).toBeUndefined();
+});
+
+it('keeps custom inputs and restores normal project and policy inputs on reruns', async () => {
+  addProjectConfiguration(tree, 'app', {
+    root: 'apps/app',
+    targets: {
+      'check-boundaries': {
+        executor: '@hao-nx-toolkit/project-boundary:check',
+        inputs: ['{projectRoot}/custom.txt'],
+        options: { project: 'app', outputFile: 'report.json' },
+      },
+    },
+  });
+  await initGenerator(tree);
+  expect(
+    readJson(tree, 'apps/app/project.json').targets['check-boundaries'],
+  ).toMatchObject({
+    inputs: [
+      '{projectRoot}/custom.txt',
+      'default',
+      '{workspaceRoot}/project-boundary.config.json',
+    ],
+    options: { project: 'app', outputFile: 'report.json' },
+  });
+});
+
+it('rejects another project selector before modifying any project or policy', async () => {
+  addProjectConfiguration(tree, 'app', { root: 'apps/app' });
+  addProjectConfiguration(tree, 'lib', {
+    root: 'libs/lib',
+    targets: {
+      'check-boundaries': {
+        executor: '@hao-nx-toolkit/project-boundary:check',
+        options: { project: 'app' },
+      },
+    },
+  });
+  const before = tree.listChanges();
+  await expect(initGenerator(tree)).rejects.toThrow(
+    'conflicting project selector',
+  );
+  expect(tree.listChanges()).toEqual(before);
+});
+
+it('rejects scope-changing configurations inherited through target defaults', async () => {
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      'check-boundaries': {
+        configurations: { other: { project: 'another' } },
+      },
+    },
+  });
+  addProjectConfiguration(tree, 'app', { root: 'apps/app' });
+  const before = tree.listChanges();
+  await expect(initGenerator(tree)).rejects.toThrow(
+    'conflicting configuration project selector',
+  );
+  expect(tree.listChanges()).toEqual(before);
+});
+
+it('chooses a unique root name when a nameless root conflicts with another project', async () => {
+  writeJson(tree, 'package.json', { private: true });
+  addProjectConfiguration(tree, 'workspace', { root: 'apps/workspace' });
+  await initGenerator(tree);
+  expect(readJson(tree, 'package.json').nx.name).toBe('workspace-1');
+});
+
+it('honors a pending project rename and target removal over the on-disk graph', async () => {
+  const devkit = require('@nx/devkit') as typeof import('@nx/devkit');
+  const fs = require('node:fs') as typeof import('node:fs');
+  const exists = fs.existsSync;
+  vi.spyOn(fs, 'existsSync').mockImplementation(
+    (path) => path === '/virtual/nx.json' || exists(path),
+  );
+  vi.spyOn(devkit, 'workspaceRoot', 'get').mockReturnValue('/virtual');
+  vi.spyOn(devkit, 'createProjectGraphAsync').mockResolvedValue({
+    nodes: {
+      old: {
+        name: 'old',
+        type: 'app',
+        data: {
+          root: 'apps/app',
+          name: 'old',
+          targets: { 'check-boundaries': { executor: 'other:check' } },
+        },
+      },
+    },
+    dependencies: { old: [] },
+  });
+  addProjectConfiguration(tree, 'renamed', { root: 'apps/app' });
+  vi.resetModules();
+  const initialize = (await import('./init.js')).initGenerator;
+  await initialize(tree);
+  expect(readJson(tree, 'apps/app/project.json')).toMatchObject({
+    name: 'renamed',
+    targets: { 'check-boundaries': { options: { project: 'renamed' } } },
+  });
+});
+
+it('preserves package metadata when a root project.json coexists', async () => {
+  writeJson(tree, 'package.json', {
+    name: '@fixture/package',
+    private: true,
+    nx: { tags: ['existing'], targets: { build: { command: 'echo build' } } },
+  });
+  writeJson(tree, 'project.json', {
+    name: 'workspace',
+    root: '.',
+    tags: ['root'],
+    targets: { lint: { command: 'echo lint' } },
+  });
+  const packageBefore = tree.read('package.json')?.toString();
+  await initGenerator(tree);
+  expect(tree.read('package.json')?.toString()).toBe(packageBefore);
+  expect(readJson(tree, 'project.json')).toMatchObject({
+    name: 'workspace',
+    tags: ['root'],
+    targets: {
+      lint: { command: 'echo lint' },
+      'check-boundaries': { options: { project: 'workspace' } },
+      'check-boundaries-all': {
+        executor: '@hao-nx-toolkit/project-boundary:check',
+      },
+    },
+  });
 });

@@ -145,7 +145,7 @@ it('installs the packaged plugin and initializes a runnable uncached root target
     '--no-interactive',
   ]);
   expect(initialized.code, initialized.text).toBe(0);
-  expect(read('package.json').nx.targets['check-boundaries']).toEqual({
+  expect(read('package.json').nx.targets['check-boundaries']).toMatchObject({
     executor: '@hao-nx-toolkit/project-boundary:check',
     cache: false,
   });
@@ -154,7 +154,11 @@ it('installs the packaged plugin and initializes a runnable uncached root target
   expect(read(configuration.$schema).title).toBe(
     'Project boundary configuration',
   );
-  const check = await pnpm(['nx', 'run', 'boundary-fixture:check-boundaries']);
+  const check = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries-all',
+  ]);
   expect(check.code, check.text).toBe(0);
 }, 60_000);
 
@@ -231,7 +235,7 @@ it('fails workspace violations with readable JSON diagnostics while a selected s
   const workspace = await pnpm([
     'nx',
     'run',
-    'boundary-fixture:check-boundaries',
+    'boundary-fixture:check-boundaries-all',
     '--',
     '--outputFile=reports/workspace.json',
   ]);
@@ -260,7 +264,7 @@ it('fails workspace violations with readable JSON diagnostics while a selected s
   const selected = await pnpm([
     'nx',
     'run',
-    'boundary-fixture:check-boundaries',
+    'boundary-fixture:check-boundaries-all',
     '--',
     '--project=app',
     '--outputFile=reports/app.json',
@@ -274,7 +278,7 @@ it('fails workspace violations with readable JSON diagnostics while a selected s
   const violating = await pnpm([
     'nx',
     'run',
-    'boundary-fixture:check-boundaries',
+    'boundary-fixture:check-boundaries-all',
     '--',
     '--project=lib',
   ]);
@@ -302,13 +306,13 @@ it('passes the workspace after explicit policy fixes and reports unknown-project
   const passing = await pnpm([
     'nx',
     'run',
-    'boundary-fixture:check-boundaries',
+    'boundary-fixture:check-boundaries-all',
   ]);
   expect(passing.code, passing.text).toBe(0);
   const unknown = await pnpm([
     'nx',
     'run',
-    'boundary-fixture:check-boundaries',
+    'boundary-fixture:check-boundaries-all',
     '--',
     '--project=unknown',
     '--outputFile=reports/error.json',
@@ -325,7 +329,7 @@ it('passes the workspace after explicit policy fixes and reports unknown-project
   const unsupported = await pnpm([
     'nx',
     'run',
-    'boundary-fixture:check-boundaries',
+    'boundary-fixture:check-boundaries-all',
   ]);
   expect(unsupported.code, unsupported.text).toBe(1);
   expect(unsupported.text).toContain(
@@ -336,7 +340,11 @@ it('passes the workspace after explicit policy fixes and reports unknown-project
       { sourceTag: 'unused', notDependOnProjectsWithTags: ['/[/'] },
     ],
   });
-  const regex = await pnpm(['nx', 'run', 'boundary-fixture:check-boundaries']);
+  const regex = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries-all',
+  ]);
   expect(regex.code, regex.text).toBe(1);
   expect(regex.text).toContain('Configuration error');
   expect(regex.text).toContain('regular expression');

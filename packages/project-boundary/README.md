@@ -9,7 +9,7 @@ pnpm add -D @hao-nx-toolkit/project-boundary
 pnpm nx g @hao-nx-toolkit/project-boundary:init
 ```
 
-In a pnpm workspace, add `-w` to the installation command when installing at its root. Initialization adds one `check-boundaries` target to the root Nx project and creates `project-boundary.config.json` with an editor schema reference. It preserves existing configuration bytes and unrelated targets. A conflicting target using another executor is an error. Repeating initialization keeps existing target options and sets `cache: false` so graph, tags, configuration, and report changes are checked on every run.
+In a pnpm workspace, add `-w` to the installation command when installing at its root. Initialization adds a `check-boundaries` target to every existing Nx project and a separate `check-boundaries-all` target to the root project and creates `project-boundary.config.json` with an editor schema reference. It preserves existing configuration bytes and unrelated targets. A conflicting target using another executor is an error. Repeating initialization includes newly added projects, keeps existing non-scope target options, and sets `cache: false` so graph, tags, configuration, and report changes are checked on every run.
 
 The initial `depConstraints: []` grants no permissions: sources with outgoing project dependencies fail until rules cover them. Fill in your policy before using the check in CI.
 
@@ -17,16 +17,24 @@ Use the root project name printed by initialization. You can also find it with `
 
 ```bash
 # Entire workspace
-pnpm nx run <root-project>:check-boundaries
+pnpm nx run <root-project>:check-boundaries-all
 
 # One project's direct outgoing dependencies
-pnpm nx run <root-project>:check-boundaries -- --project=my-app
+pnpm nx run my-app:check-boundaries
 
 # Optional JSON report, relative to the workspace root or absolute
-pnpm nx run <root-project>:check-boundaries -- --outputFile=reports/boundaries.json
+pnpm nx run <root-project>:check-boundaries-all -- --outputFile=reports/boundaries.json
 ```
 
-The `--` separator before `--project` is required: Nx otherwise treats it as its own project-selection argument. You can combine `--project` and `--outputFile` after the separator.
+Each project target fixes `options.project` to its own project name. Native affected execution uses Nx's selection and dependent propagation:
+
+```bash
+pnpm nx affected -t check-boundaries --base=main --head=HEAD --output-style=static
+```
+
+Targets include the shared configuration file as a workspace input, so changes to policy select all configured projects. Rerun initialization after adding projects. Existing generated root workspace targets migrate to `check-boundaries-all`; conflicting executors or project selectors fail before any writes.
+
+When overriding selection on the workspace target, the `--` separator before `--project` is required: Nx otherwise treats it as its own project-selection argument. You can combine `--project` and `--outputFile` after the separator.
 
 ## Shared configuration
 
