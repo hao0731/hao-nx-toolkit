@@ -81,6 +81,14 @@ The first version does not provide dependency exceptions, project exclusions, cy
 
 `outputFile` writes reports on successful checks, violations, and configuration/runtime errors. Parent directories are created as needed. Configuration errors replace a previous success report with a failed report; callers must also check the command's exit code, particularly if the output path cannot be written.
 
+For parallel project targets, give each source its own report path:
+
+```bash
+pnpm nx affected -t check-boundaries --base=main --head=HEAD --output-style=static -- --outputFile='reports/{boundaryProjectName}.json'
+```
+
+`{boundaryProjectName}` requires a selected project and expands to `project-` followed by the name's full lowercase SHA-256 digest of its UTF-8 encoding (a 72-character component). The bounded digest makes long or scoped names and path separators safe and distinguishes names even on case-insensitive filesystems. The JSON scope retains the original project name. Nx owns and interpolates `{projectName}` before CLI execution; use the plugin-owned `{boundaryProjectName}` token for safe report filenames. Literal paths still work for single checks; sharing a literal output path across parallel tasks can overwrite reports. Full workspace reports use a literal path unless a source project is explicitly selected.
+
 Reports have `version: 1`, a `scope` (`{ "kind": "workspace" }` or `{ "kind": "project", "project": "my-app" }`), `success`, `violations`, and `errors`. Ordering is stable across graph insertion order.
 
 Violation kinds are `unmatched-source`, `disallowed-target`, and `forbidden-tag`. Each has `source` and `sourceTags`. Target violations also contain `target`, `targetTags`, `dependencyType`, zero-based `constraintIndex`, and the original `constraint`. Error entries contain `kind` (`configuration`, `runtime`, or `report`) and `message`. A report-writing error is printed to the terminal and fails the task; it may prevent producing a report file.

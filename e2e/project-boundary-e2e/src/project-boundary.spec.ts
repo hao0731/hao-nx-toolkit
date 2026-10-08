@@ -286,6 +286,43 @@ it('fails workspace violations with readable JSON diagnostics while a selected s
   expect(violating.text).toContain('lib → downstream');
 }, 60_000);
 
+it('retains separate reports from parallel project targets', async () => {
+  const result = await pnpm([
+    'nx',
+    'run-many',
+    '-t',
+    'check-boundaries',
+    '-p',
+    'app,lib',
+    '--parallel=2',
+    '--output-style=static',
+    '--',
+    '--outputFile=reports/{boundaryProjectName}.json',
+  ]);
+  expect(result.code, result.text).toBe(1);
+  expect(result.text, result.text).toContain('lib → downstream');
+  expect(
+    read(
+      'reports/project-a172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333.json',
+    ),
+  ).toMatchObject({
+    scope: { kind: 'project', project: 'app' },
+    success: true,
+    violations: [],
+  });
+  expect(
+    read(
+      'reports/project-76b5a357391276b282a516f54f48ef3c207f46d8192dc58c208d5183d38415f8.json',
+    ),
+  ).toMatchObject({
+    scope: { kind: 'project', project: 'lib' },
+    success: false,
+    violations: [
+      expect.objectContaining({ source: 'lib', target: 'downstream' }),
+    ],
+  });
+}, 60_000);
+
 it('passes the workspace after explicit policy fixes and reports unknown-project and invalid-policy failures', async () => {
   json('project-boundary.config.json', {
     depConstraints: [

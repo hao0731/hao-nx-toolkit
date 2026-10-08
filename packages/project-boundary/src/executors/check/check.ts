@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createProjectGraphAsync, type PromiseExecutor } from '@nx/devkit';
 import {
   mkdirSync,
@@ -138,7 +139,18 @@ const runExecutor: PromiseExecutor<CheckExecutorSchema> = async (
     if (options.outputFile !== undefined) {
       if (typeof options.outputFile !== 'string' || !options.outputFile.length)
         throw new Error('outputFile must be a nonempty path');
-      const candidate = resolve(context.root, options.outputFile);
+      let reportFile = options.outputFile;
+      if (reportFile.includes('{boundaryProjectName}')) {
+        if (typeof options.project !== 'string' || !options.project.length)
+          throw new Error(
+            'outputFile {boundaryProjectName} requires a selected project',
+          );
+        // A bounded lowercase digest distinguishes names on case-insensitive
+        // filesystems and cannot introduce separators or traversal components.
+        const component = `project-${createHash('sha256').update(options.project, 'utf8').digest('hex')}`;
+        reportFile = reportFile.replaceAll('{boundaryProjectName}', component);
+      }
+      const candidate = resolve(context.root, reportFile);
       let sameFile = candidate === configPath;
       try {
         sameFile ||=

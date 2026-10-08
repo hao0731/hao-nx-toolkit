@@ -438,3 +438,140 @@ it('does not create or overwrite missing input through a dangling report symlink
   });
   expect(() => readFileSync(configPath)).toThrow();
 });
+
+it('writes separate project reports from one output template without overwriting outcomes', async () => {
+  configure([{ sourceTag: 'scope:app', onlyDependOnProjectsWithTags: [] }]);
+  const outputFile = 'reports/{boundaryProjectName}.json';
+  expect(await executor({ project: 'app', outputFile }, context())).toEqual({
+    success: false,
+  });
+  expect(await executor({ project: 'lib', outputFile }, context())).toEqual({
+    success: true,
+  });
+  expect(
+    JSON.parse(
+      readFileSync(
+        join(
+          root,
+          'reports/project-a172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333.json',
+        ),
+        'utf8',
+      ),
+    ),
+  ).toMatchObject({
+    scope: { kind: 'project', project: 'app' },
+    success: false,
+  });
+  expect(
+    JSON.parse(
+      readFileSync(
+        join(
+          root,
+          'reports/project-76b5a357391276b282a516f54f48ef3c207f46d8192dc58c208d5183d38415f8.json',
+        ),
+        'utf8',
+      ),
+    ),
+  ).toMatchObject({
+    scope: { kind: 'project', project: 'lib' },
+    success: true,
+  });
+});
+
+it.each([
+  [
+    '@scope/app',
+    'project-3aa1a917cd747812ae4add34e82a72a59a2f9dae5f8d87b591f98eec7b436302',
+  ],
+  [
+    'A\\B',
+    'project-edc0916552f4dbb224da7a63ebb17d9c54453ca43548cf109ca26389c39fbf0e',
+  ],
+  [
+    '.',
+    'project-cdb4ee2aea69cc6a83331bbe96dc2caa9a299d21329efb0336fc02a82e1839a8',
+  ],
+  [
+    '..',
+    'project-5ec1f7e700f37c3d0b2981d04855fc34b94aaa15457b05ca571817442d228f81',
+  ],
+  [
+    'App',
+    'project-0d04bfeb7d64b71c74fc925cca93d683154e8cc7e6e5838faced498e34c9984d',
+  ],
+])(
+  'safely encodes project name %s as one filesystem component',
+  async (project, component) => {
+    configure([]);
+    graph.nodes[project] = {
+      name: project,
+      type: 'lib',
+      data: { root: 'fixture' },
+    };
+    expect(
+      await executor(
+        { project, outputFile: 'reports/{boundaryProjectName}.json' },
+        context(),
+      ),
+    ).toEqual({ success: true });
+    expect(
+      JSON.parse(
+        readFileSync(join(root, 'reports', `${component}.json`), 'utf8'),
+      ).scope,
+    ).toEqual({ kind: 'project', project });
+  },
+);
+
+it('requires project selection when a report uses the project placeholder', async () => {
+  configure([]);
+  expect(
+    await executor(
+      { outputFile: 'reports/{boundaryProjectName}.json' },
+      context(),
+    ),
+  ).toEqual({ success: false });
+  expect(messages.join('\n')).toContain(
+    'outputFile {boundaryProjectName} requires a selected project',
+  );
+});
+
+it('protects the policy through an expanded report symlink', async () => {
+  configure([]);
+  const before = readFileSync(
+    join(root, 'project-boundary.config.json'),
+    'utf8',
+  );
+  symlinkSync(
+    'project-boundary.config.json',
+    join(
+      root,
+      'project-a172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333.json',
+    ),
+  );
+  expect(
+    await executor(
+      { project: 'app', outputFile: '{boundaryProjectName}.json' },
+      context(),
+    ),
+  ).toEqual({ success: false });
+  expect(readFileSync(join(root, 'project-boundary.config.json'), 'utf8')).toBe(
+    before,
+  );
+  expect(messages.join('\n')).toContain('must not overwrite');
+});
+
+it('writes a report for a long valid project name within filesystem filename limits', async () => {
+  configure([]);
+  const project = 'a'.repeat(180);
+  graph.nodes[project] = {
+    name: project,
+    type: 'lib',
+    data: { root: 'fixture' },
+  };
+  expect(
+    await executor(
+      { project, outputFile: 'reports/{boundaryProjectName}.json' },
+      context(),
+    ),
+  ).toEqual({ success: true });
+});
