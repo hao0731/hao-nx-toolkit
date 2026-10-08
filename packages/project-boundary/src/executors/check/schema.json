@@ -9,6 +9,11 @@
       "type": "string",
       "minLength": 1,
       "description": "Check only this project\u2019s direct outgoing project dependencies. Omit to check the workspace."
+    },
+    "outputFile": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional JSON report path, relative to the workspace root or absolute."
     }
   },
   "additionalProperties": false

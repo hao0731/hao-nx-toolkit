@@ -3,7 +3,7 @@
     "check": {
       "implementation": "./dist/executors/check/check",
       "schema": "./dist/executors/check/schema.json",
-      "description": "check executor"
+      "description": "Check direct workspace project dependencies against tag constraints."
     }
   }
 }

@@ -1,5 +1,11 @@
 import type { ExecutorContext, ProjectGraph } from '@nx/devkit';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import executor from './check';
@@ -141,11 +147,11 @@ it.each([
   },
   {
     depConstraints: [
-      { sourceTag: 'scope:*', onlyDependOnProjectsWithTags: ['scope:lib'] },
+      { sourceTag: 123, onlyDependOnProjectsWithTags: ['scope:lib'] },
     ],
   },
-  { depConstraints: [{ sourceTag: 'scope:app' }] },
-])('rejects invalid baseline configuration %j', async (config) => {
+  { depConstraints: [{ allSourceTags: [] }] },
+])('rejects invalid configuration %j', async (config) => {
   writeFileSync(
     join(root, 'project-boundary.config.json'),
     JSON.stringify(config),
@@ -196,4 +202,239 @@ it('ignores a source whose only dependency is an external package', async () => 
     { source: 'app', target: 'npm:external', type: 'static' },
   ];
   expect(await executor({}, context())).toEqual({ success: true });
+});
+
+it('requires every allSourceTags entry and permits source-only constraints', async () => {
+  configure([{ allSourceTags: ['scope:app', 'role:production'] }]);
+  expect(await executor({}, context())).toEqual({ success: false });
+  graph.nodes.app.data.tags = ['scope:app', 'role:production'];
+  expect(await executor({}, context())).toEqual({ success: true });
+});
+
+it('rejects a directly denied target even when an allow constraint permits it', async () => {
+  configure([
+    {
+      sourceTag: 'scope:app',
+      onlyDependOnProjectsWithTags: ['scope:lib'],
+      notDependOnProjectsWithTags: ['scope:lib'],
+    },
+  ]);
+  expect(await executor({}, context())).toEqual({ success: false });
+  expect(messages.join('\n')).toContain('notDependOnProjectsWithTags');
+  configure([{ sourceTag: 'scope:app', notDependOnProjectsWithTags: [] }]);
+  expect(await executor({}, context())).toEqual({ success: true });
+});
+
+it.each([
+  ['scope:*', 'scope:*'],
+  ['/^scope:app$/', '/^scope:lib$/'],
+  ['*', '*'],
+])('matches source %s and target %s patterns', async (sourceTag, targetTag) => {
+  configure([{ sourceTag, onlyDependOnProjectsWithTags: [targetTag] }]);
+  expect(await executor({}, context())).toEqual({ success: true });
+  if (sourceTag === '*') {
+    graph.nodes.app.data.tags = [];
+    graph.nodes.lib.data.tags = [];
+    expect(await executor({}, context())).toEqual({ success: true });
+  }
+});
+
+it('anchors glob matches and treats non-star characters literally', async () => {
+  graph.nodes.app.data.tags = ['scope:app[1].+?'];
+  configure([{ sourceTag: 'scope:app[1].+?*' }]);
+  expect(await executor({}, context())).toEqual({ success: true });
+  graph.nodes.app.data.tags = ['prefix-scope:app[1].+?'];
+  expect(await executor({}, context())).toEqual({ success: false });
+});
+
+it.each(['/[/', '/unterminated', '/pattern/i'])(
+  'rejects invalid regex %s eagerly even in unused constraints',
+  async (pattern) => {
+    configure([
+      { sourceTag: 'unused', notDependOnProjectsWithTags: [pattern] },
+    ]);
+    graph.dependencies = {};
+    expect(await executor({}, context())).toEqual({ success: false });
+    expect(messages.join('\n')).toContain('Configuration error');
+  },
+);
+
+it('treats backslashes literally in exact tags and glob patterns', async () => {
+  graph.nodes.app.data.tags = ['path:\\service'];
+  configure([{ sourceTag: 'path:\\*' }]);
+  expect(await executor({}, context())).toEqual({ success: true });
+});
+
+it('writes a versioned JSON report for the selected project and its exact violations', async () => {
+  configure([{ sourceTag: 'scope:app', onlyDependOnProjectsWithTags: [] }]);
+  expect(
+    await executor(
+      { project: 'app', outputFile: 'boundary-report.json' },
+      context(),
+    ),
+  ).toEqual({ success: false });
+  expect(
+    JSON.parse(readFileSync(join(root, 'boundary-report.json'), 'utf8')),
+  ).toEqual({
+    version: 1,
+    scope: { kind: 'project', project: 'app' },
+    success: false,
+    errors: [],
+    violations: [
+      {
+        kind: 'disallowed-target',
+        source: 'app',
+        target: 'lib',
+        sourceTags: ['scope:app'],
+        targetTags: ['scope:lib'],
+        dependencyType: 'static',
+        constraintIndex: 0,
+        constraint: {
+          sourceTag: 'scope:app',
+          onlyDependOnProjectsWithTags: [],
+        },
+      },
+    ],
+  });
+});
+
+it('replaces a successful report with a failed configuration report', async () => {
+  configure([{ sourceTag: '*' }]);
+  const options = { outputFile: 'reports/boundary.json' };
+  expect(await executor(options, context())).toEqual({ success: true });
+  configure([{ sourceTag: 'unused', notDependOnProjectsWithTags: ['/[/'] }]);
+  expect(await executor(options, context())).toEqual({ success: false });
+  const report = JSON.parse(
+    readFileSync(join(root, options.outputFile), 'utf8'),
+  );
+  expect(report).toMatchObject({
+    version: 1,
+    scope: { kind: 'workspace' },
+    success: false,
+    violations: [],
+    errors: [{ kind: 'configuration' }],
+  });
+});
+
+it('refuses to overwrite the input configuration and fails if a report cannot be written', async () => {
+  configure([{ sourceTag: '*' }]);
+  const configFile = join(root, 'project-boundary.config.json');
+  const original = readFileSync(configFile, 'utf8');
+  expect(
+    await executor({ outputFile: 'project-boundary.config.json' }, context()),
+  ).toEqual({ success: false });
+  expect(readFileSync(configFile, 'utf8')).toBe(original);
+  writeFileSync(join(root, 'blocked'), 'not a directory');
+  expect(
+    await executor({ outputFile: 'blocked/report.json' }, context()),
+  ).toEqual({ success: false });
+  expect(messages.join('\n')).toContain('Report error');
+});
+
+it('protects configuration aliases and writes unknown-project errors into the report', async () => {
+  configure([{ sourceTag: '*' }]);
+  symlinkSync(
+    join(root, 'project-boundary.config.json'),
+    join(root, 'config-alias.json'),
+  );
+  expect(
+    await executor({ outputFile: 'config-alias.json' }, context()),
+  ).toEqual({ success: false });
+  expect(
+    JSON.parse(
+      readFileSync(join(root, 'project-boundary.config.json'), 'utf8'),
+    ),
+  ).toEqual({ depConstraints: [{ sourceTag: '*' }] });
+  expect(
+    await executor(
+      { project: 'unknown', outputFile: 'report.json' },
+      context(),
+    ),
+  ).toEqual({ success: false });
+  expect(
+    JSON.parse(readFileSync(join(root, 'report.json'), 'utf8')),
+  ).toMatchObject({
+    success: false,
+    errors: [{ kind: 'configuration', message: 'Unknown project: unknown' }],
+  });
+});
+
+it('reports uncovered sources and produces stable ordering independent of graph insertion order', async () => {
+  configure([]);
+  graph.nodes.zeta = {
+    name: 'zeta',
+    type: 'lib',
+    data: { root: 'zeta', tags: ['z', 'a'] },
+  };
+  graph.dependencies.zeta = [
+    { source: 'zeta', target: 'lib', type: 'implicit' },
+  ];
+  await executor({ outputFile: 'report.json' }, context());
+  const first = readFileSync(join(root, 'report.json'), 'utf8');
+  expect(JSON.parse(first).violations).toEqual([
+    { kind: 'unmatched-source', source: 'app', sourceTags: ['scope:app'] },
+    { kind: 'unmatched-source', source: 'zeta', sourceTags: ['a', 'z'] },
+  ]);
+  graph.nodes = Object.fromEntries(Object.entries(graph.nodes).reverse());
+  graph.dependencies = Object.fromEntries(
+    Object.entries(graph.dependencies).reverse(),
+  );
+  await executor({ outputFile: 'report.json' }, context());
+  expect(readFileSync(join(root, 'report.json'), 'utf8')).toBe(first);
+});
+
+it('checks deny constraints on direct targets without walking downstream dependencies', async () => {
+  configure([
+    {
+      sourceTag: 'scope:app',
+      notDependOnProjectsWithTags: ['scope:forbidden'],
+    },
+  ]);
+  graph.nodes.downstream = {
+    name: 'downstream',
+    type: 'lib',
+    data: { root: 'downstream', tags: ['scope:forbidden'] },
+  };
+  graph.dependencies.lib = [
+    { source: 'lib', target: 'downstream', type: 'dynamic' },
+  ];
+  expect(await executor({ project: 'app' }, context())).toEqual({
+    success: true,
+  });
+});
+
+it.each([
+  { sourceTag: '*', allSourceTags: ['scope:app'] },
+  { allSourceTags: [null] },
+  { sourceTag: '*', notDependOnProjectsWithTags: 'scope:lib' },
+  { sourceTag: '*', onlyDependOnProjectsWithTags: [null] },
+  {},
+])('rejects malformed constraints %j', async (constraint) => {
+  configure([constraint]);
+  expect(await executor({}, context())).toEqual({ success: false });
+  expect(messages.join('\n')).toContain('Configuration error');
+});
+
+it('accepts a string $schema annotation but rejects unsupported executor options', async () => {
+  writeFileSync(
+    join(root, 'project-boundary.config.json'),
+    JSON.stringify({
+      $schema: './schema.json',
+      depConstraints: [{ sourceTag: '*' }],
+    }),
+  );
+  expect(await executor({}, context())).toEqual({ success: true });
+  expect(await executor({ exclusions: ['app'] } as never, context())).toEqual({
+    success: false,
+  });
+  expect(messages.join('\n')).toContain('Unsupported executor option');
+});
+
+it('does not create or overwrite missing input through a dangling report symlink', async () => {
+  const configPath = join(root, 'project-boundary.config.json');
+  symlinkSync(configPath, join(root, 'alias.json'));
+  expect(await executor({ outputFile: 'alias.json' }, context())).toEqual({
+    success: false,
+  });
+  expect(() => readFileSync(configPath)).toThrow();
 });
