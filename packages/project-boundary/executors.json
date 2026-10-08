@@ -1,0 +1,9 @@
+{
+  "executors": {
+    "check": {
+      "implementation": "./dist/executors/check/check",
+      "schema": "./dist/executors/check/schema.json",
+      "description": "check executor"
+    }
+  }
+}

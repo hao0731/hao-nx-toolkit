@@ -16,7 +16,8 @@
   },
   "files": [
     "dist",
-    "!**/*.tsbuildinfo"
+    "!**/*.tsbuildinfo",
+    "executors.json"
   ],
   "nx": {
     "name": "project-boundary",
@@ -53,6 +54,8 @@
     ]
   },
   "dependencies": {
+    "@nx/devkit": "23.2.0",
     "tslib": "^2.3.0"
-  }
+  },
+  "executors": "./executors.json"
 }

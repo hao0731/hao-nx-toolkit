@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "version": 2,
+  "title": "Project boundary check",
+  "description": "Check direct workspace project dependencies against tag constraints.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Check only this project\u2019s direct outgoing project dependencies. Omit to check the workspace."
+    }
+  },
+  "additionalProperties": false
+}
