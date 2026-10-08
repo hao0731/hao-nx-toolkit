@@ -32,7 +32,11 @@ Each project target fixes `options.project` to its own project name. Native affe
 pnpm nx affected -t check-boundaries --base=main --head=HEAD --output-style=static
 ```
 
-Targets include the shared configuration file as a workspace input, so changes to policy select all configured projects. Rerun initialization after adding projects. Existing generated root workspace targets migrate to `check-boundaries-all`; conflicting executors or project selectors fail before any writes.
+Nx also selects reverse dependents: changing a dependency target's tags rechecks its upstream sources. The executor retains the complete project graph to evaluate unchanged dependency targets. Targets include the shared configuration file as a workspace input, so policy changes select all configured projects even though caching is disabled. Rerun initialization after adding projects. Existing generated root workspace targets migrate to `check-boundaries-all`; conflicting executors or project selectors fail before any writes.
+
+`--base=main --head=HEAD` selects committed changes. For current uncommitted changes, use Nx's `--uncommitted` selection. Checks read the current workspace; staged-only snapshot validation is not provided.
+
+Initialization stores minimal target configuration for inferred projects and preserves their inferred build/test targets.
 
 When overriding selection on the workspace target, the `--` separator before `--project` is required: Nx otherwise treats it as its own project-selection argument. You can combine `--project` and `--outputFile` after the separator.
 
@@ -100,4 +104,4 @@ pnpm nx run-many -t test lint typecheck build -p project-boundary
 pnpm nx run project-boundary-e2e:e2e --skipNxCache
 ```
 
-The E2E project packs and installs the published package contents into a temporary Nx 23.2.0 workspace, exercises real Nx commands, and cleans up its workspace, archive, and isolated package store. It requires access to the npm registry on a cold cache.
+The E2E project packs and installs the published package contents into a temporary Nx 23.2.0 workspace, exercises real Nx commands and temporary Git commits for native affected selection, target tag propagation, shared-policy changes, inferred project initialization, and parallel JSON reports, and cleans up its workspace, archive, and isolated package store. It requires access to the npm registry on a cold cache.

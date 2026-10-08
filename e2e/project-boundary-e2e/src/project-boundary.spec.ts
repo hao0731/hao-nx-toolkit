@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import {
   mkdtempSync,
+  readdirSync,
   mkdirSync,
   readFileSync,
   rmSync,
@@ -386,3 +387,293 @@ it('passes the workspace after explicit policy fixes and reports unknown-project
   expect(regex.text).toContain('Configuration error');
   expect(regex.text).toContain('regular expression');
 }, 60_000);
+
+async function git(args: string[]) {
+  const result = await execute(
+    'git',
+    [
+      '-c',
+      'core.hooksPath=/dev/null',
+      '-c',
+      'commit.gpgSign=false',
+      '-c',
+      'user.name=Boundary E2E',
+      '-c',
+      'user.email=boundary-e2e@example.invalid',
+      ...args,
+    ],
+    {
+      cwd: consumer,
+      env: {
+        ...environment,
+        GIT_CONFIG_NOSYSTEM: '1',
+        GIT_CONFIG_GLOBAL: '/dev/null',
+      },
+    },
+  );
+  return result.stdout.trim();
+}
+async function commitFixture(message: string) {
+  await git(['add', '.']);
+  await git(['commit', '-m', message]);
+  return git(['rev-parse', 'HEAD']);
+}
+function parsedJson(text: string) {
+  return JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1));
+}
+function projectReports(directory: string) {
+  return readdirSync(join(consumer, directory)).map((file) =>
+    read(`${directory}/${file}`),
+  );
+}
+
+it('runs native affected checks from real Git changes and initializes inferred projects without freezing their targets', async () => {
+  json('apps/sibling/project.json', {
+    name: 'sibling',
+    tags: ['scope:sibling'],
+    implicitDependencies: ['downstream'],
+  });
+  json('packages/packaged/package.json', {
+    name: '@fixture/packaged',
+    private: true,
+    nx: { name: 'packaged', tags: ['scope:isolated'] },
+  });
+  writeFileSync(
+    join(consumer, 'pnpm-workspace.yaml'),
+    `packages: ['packages/*']\nstoreDir: ${JSON.stringify(join(temporary, 'store'))}\nallowBuilds:\n  nx: true\n`,
+  );
+  mkdirSync(join(consumer, 'projects/inferred'), { recursive: true });
+  writeFileSync(join(consumer, 'projects/inferred/inferred.marker'), 'fixture');
+  mkdirSync(join(consumer, 'tools'), { recursive: true });
+  writeFileSync(
+    join(consumer, 'tools/inference.cjs'),
+    `const {dirname} = require('node:path');
+module.exports.createNodesV2 = ['**/inferred.marker', async (files) => files.map(file => [file, {projects: {[dirname(file)]: {name: 'inferred', targets: {build: {command: 'echo inferred-build'}}}}}])];\n`,
+  );
+  json('nx.json', {
+    analytics: false,
+    neverConnectToCloud: true,
+    plugins: ['./tools/inference.cjs'],
+  });
+  json('project-boundary.config.json', {
+    depConstraints: [
+      { sourceTag: '*' },
+      { sourceTag: 'scope:app', notDependOnProjectsWithTags: ['scope:shared'] },
+      {
+        sourceTag: 'scope:sibling',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+    ],
+  });
+  const initArgs = [
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ];
+  const initialized = await pnpm(initArgs);
+  expect(initialized.code, initialized.text).toBe(0);
+  const inferredFile = read('projects/inferred/project.json');
+  expect(inferredFile.name).toBe('inferred');
+  expect(Object.keys(inferredFile.targets)).toEqual(['check-boundaries']);
+  expect(inferredFile.targets['check-boundaries'].options.project).toBe(
+    'inferred',
+  );
+  expect(
+    read('packages/packaged/package.json').nx.targets['check-boundaries']
+      .options.project,
+  ).toBe('packaged');
+  const inferredBefore = readFileSync(
+    join(consumer, 'projects/inferred/project.json'),
+    'utf8',
+  );
+  const repeated = await pnpm(initArgs);
+  expect(repeated.code, repeated.text).toBe(0);
+  expect(
+    readFileSync(join(consumer, 'projects/inferred/project.json'), 'utf8'),
+  ).toBe(inferredBefore);
+  const inferredResolved = await pnpm([
+    'nx',
+    'show',
+    'project',
+    'inferred',
+    '--json',
+  ]);
+  expect(inferredResolved.code, inferredResolved.text).toBe(0);
+  expect(parsedJson(inferredResolved.text).targets.build.options.command).toBe(
+    'echo inferred-build',
+  );
+  writeFileSync(
+    join(consumer, '.gitignore'),
+    'node_modules/\n.nx/\nreports/\n',
+  );
+  await git(['init', '--initial-branch=main']);
+  const sourceBase = await commitFixture('baseline source policy');
+  writeFileSync(
+    join(consumer, 'apps/app/index.ts'),
+    "import { value } from '@fixture/lib'; console.log(value, 'changed');\n",
+  );
+  const sourceHead = await commitFixture('change app source');
+  async function affected(base: string, head: string, directory: string) {
+    const selected = await pnpm([
+      'nx',
+      'show',
+      'projects',
+      '--affected',
+      `--base=${base}`,
+      `--head=${head}`,
+      '--json',
+    ]);
+    expect(selected.code, selected.text).toBe(0);
+    const result = await pnpm([
+      'nx',
+      'affected',
+      '-t',
+      'check-boundaries',
+      `--base=${base}`,
+      `--head=${head}`,
+      '--parallel=2',
+      '--output-style=static',
+      '--',
+      `--outputFile=${directory}/{boundaryProjectName}.json`,
+    ]);
+    return {
+      selected: JSON.parse(
+        selected.text.slice(
+          selected.text.indexOf('['),
+          selected.text.lastIndexOf(']') + 1,
+        ),
+      ).sort(),
+      result,
+      reports: projectReports(directory),
+    };
+  }
+  const source = await affected(sourceBase, sourceHead, 'reports/source');
+  expect(source.selected).toEqual(['app', 'incoming']);
+  expect(source.result.code, source.result.text).toBe(1);
+  expect(source.reports.map((report) => report.scope.project).sort()).toEqual([
+    'app',
+    'incoming',
+  ]);
+  expect(
+    source.reports.find((report) => report.scope.project === 'app'),
+  ).toMatchObject({
+    success: false,
+    violations: [
+      expect.objectContaining({
+        source: 'app',
+        target: 'lib',
+        targetTags: ['scope:shared'],
+      }),
+    ],
+  });
+  expect(
+    source.reports.find((report) => report.scope.project === 'incoming'),
+  ).toMatchObject({ success: true, violations: [] });
+  expect(source.result.text).not.toContain('sibling:check-boundaries');
+
+  json('project-boundary.config.json', {
+    depConstraints: [
+      { sourceTag: '*' },
+      {
+        sourceTag: 'scope:app',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+      {
+        sourceTag: 'scope:sibling',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+    ],
+  });
+  const tagBase = await commitFixture('baseline target tag policy');
+  json('libs/lib/project.json', {
+    ...read('libs/lib/project.json'),
+    tags: ['scope:blocked'],
+  });
+  const tagHead = await commitFixture('change lib tags');
+  const tags = await affected(tagBase, tagHead, 'reports/tags');
+  expect(tags.selected).toEqual(['app', 'incoming', 'lib']);
+  expect(tags.result.code, tags.result.text).toBe(1);
+  expect(tags.reports.map((report) => report.scope.project).sort()).toEqual([
+    'app',
+    'incoming',
+    'lib',
+  ]);
+  expect(
+    tags.reports.find((report) => report.scope.project === 'app'),
+  ).toMatchObject({
+    success: false,
+    violations: [
+      expect.objectContaining({
+        source: 'app',
+        target: 'lib',
+        targetTags: ['scope:blocked'],
+      }),
+    ],
+  });
+
+  const policyBase = tagHead;
+  json('project-boundary.config.json', {
+    depConstraints: [{ sourceTag: '*' }],
+  });
+  const policyHead = await commitFixture('change shared policy only');
+  expect(await git(['diff', '--name-only', policyBase, policyHead])).toBe(
+    'project-boundary.config.json',
+  );
+  const changedPolicy = await affected(
+    policyBase,
+    policyHead,
+    'reports/policy',
+  );
+  const allProjects = [
+    'app',
+    'boundary-fixture',
+    'downstream',
+    'incoming',
+    'inferred',
+    'lib',
+    'packaged',
+    'sibling',
+  ];
+  expect(changedPolicy.selected).toEqual(allProjects);
+  expect(changedPolicy.result.code, changedPolicy.result.text).toBe(0);
+  expect(
+    changedPolicy.reports.map((report) => report.scope.project).sort(),
+  ).toEqual(allProjects);
+  expect(
+    changedPolicy.reports.every(
+      (report) => report.success && report.violations.length === 0,
+    ),
+  ).toBe(true);
+
+  json('project-boundary.config.json', {
+    depConstraints: [
+      { sourceTag: '*' },
+      {
+        sourceTag: 'scope:app',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+      {
+        sourceTag: 'scope:sibling',
+        onlyDependOnProjectsWithTags: ['scope:shared'],
+      },
+    ],
+  });
+  const whole = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
+    '--',
+    '--outputFile=reports/final-workspace.json',
+  ]);
+  expect(whole.code, whole.text).toBe(1);
+  expect(read('reports/final-workspace.json')).toMatchObject({
+    scope: { kind: 'workspace' },
+    success: false,
+    violations: expect.arrayContaining([
+      expect.objectContaining({ source: 'app', target: 'lib' }),
+      expect.objectContaining({ source: 'sibling', target: 'downstream' }),
+    ]),
+  });
+}, 120_000);
