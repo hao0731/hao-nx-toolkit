@@ -22,21 +22,21 @@ export default [
           allow: ['^.*/eslint(\\.base)?\\.config\\.[cm]?[jt]s$'],
           depConstraints: [
             {
-              sourceTag: 'scope:shared',
-              onlyDependOnLibsWithTags: ['scope:shared'],
+              sourceTag: 'type:shared',
+              onlyDependOnLibsWithTags: ['type:shared']
             },
             {
-              sourceTag: 'scope:async',
-              onlyDependOnLibsWithTags: ['scope:shared', 'scope:async'],
+              sourceTag: 'scope:workspace',
+              onlyDependOnLibsWithTags: ['type:shared', 'scope:workspace']
             },
             {
-              sourceTag: 'scope:colors',
-              onlyDependOnLibsWithTags: ['scope:shared', 'scope:colors'],
+              sourceTag: 'lang:golang',
+              onlyDependOnLibsWithTags: ['type:shared', 'lang:golang']
             },
             {
-              sourceTag: 'scope:strings',
-              onlyDependOnLibsWithTags: ['scope:shared', 'scope:strings'],
-            },
+              sourceTag: 'lang:typescript',
+              onlyDependOnLibsWithTags: ['type:shared', 'lang:typescript']
+            }
           ],
         },
       ],
