@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "version": 2,
+  "title": "Project boundary check",
+  "description": "Check direct workspace project dependencies against tag constraints.",
+  "type": "object",
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Check only this project\u2019s direct outgoing project dependencies. Omit to check the workspace."
+    },
+    "outputFile": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional JSON report path, relative to the workspace root or absolute. For parallel project tasks use {boundaryProjectName}, expanded to project- plus the full lowercase SHA-256 digest of the UTF-8 encoding of the selected name. Requires project selection."
+    }
+  },
+  "additionalProperties": false
+}

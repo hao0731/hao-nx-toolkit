@@ -9,23 +9,28 @@
       "project-boundary"
     ],
     "tags": [
+      "kind:workspace",
       "role:testing"
     ],
     "targets": {
       "e2e": {
-        "executor": "@nx/vitest:test",
-        "outputs": [
-          "{options.reportsDirectory}"
-        ],
+        "executor": "nx:run-commands",
+        "cache": false,
         "dependsOn": [
           "^build"
         ],
         "options": {
-          "reportsDirectory": "coverage/e2e/project-boundary-e2e",
-          "maxWorkers": 1,
-          "isolate": false
+          "command": "vitest",
+          "cwd": "e2e/project-boundary-e2e"
         }
+      },
+      "test": {
+        "cache": false,
+        "dependsOn": [
+          "^build"
+        ]
       }
     }
-  }
+  },
+  "type": "module"
 }

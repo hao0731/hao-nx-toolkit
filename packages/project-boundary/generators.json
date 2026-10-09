@@ -1,0 +1,9 @@
+{
+  "generators": {
+    "init": {
+      "factory": "./dist/generators/init/init",
+      "schema": "./dist/generators/init/schema.json",
+      "description": "Initialize root project boundary checks and shared configuration."
+    }
+  }
+}
