@@ -9,7 +9,7 @@ pnpm add -D @hao-nx-toolkit/project-boundary
 pnpm nx g @hao-nx-toolkit/project-boundary:init
 ```
 
-In a pnpm workspace, add `-w` to the installation command when installing at its root. Initialization adds a `check-boundaries` target to every existing Nx project and a separate `check-boundaries-all` target to the root project and creates `project-boundary.config.json` with an editor schema reference. It preserves existing configuration bytes and unrelated targets. A conflicting target using another executor is an error. Initialization resolves Nx executor, name, wildcard, and filtered array defaults before validating source selection. Migrated workspace targets retain inherited default and named configurations; ordinary targets continue to inherit non-scope settings from Nx. Repeating initialization includes newly added projects, keeps existing non-scope target options, and sets `cache: false` so graph, tags, configuration, and report changes are checked on every run.
+In a pnpm workspace, add `-w` to the installation command when installing at its root. Initialization adds a `check-boundaries` target to every existing Nx project and a separate `check-boundaries-all` target to the root project and creates `project-boundary.config.json` with an editor schema reference. It preserves existing configuration bytes and unrelated targets. A conflicting target using another executor is an error. Initialization resolves Nx executor, name, wildcard, and filtered array defaults before validating source selection. Defaults are synthesized with the same per-entry compatibility checks as the project graph, so unrelated executors cannot hide source conflicts. Migrated workspace targets retain inherited default and named configurations; ordinary targets continue to inherit non-scope settings from Nx. Repeating initialization includes newly added projects, keeps existing non-scope target options, and sets `cache: false` so graph, tags, configuration, and report changes are checked on every run.
 
 The initial `depConstraints: []` grants no permissions: sources with outgoing project dependencies fail until rules cover them. Fill in your policy before using the check in CI.
 
@@ -97,7 +97,7 @@ Reports have `version: 1`, a `scope` (`{ "kind": "workspace" }` or `{ "kind": "p
 
 Violation kinds are `unmatched-source`, `disallowed-target`, and `forbidden-tag`. Each has `source` and `sourceTags`. Target violations also contain `target`, `targetTags`, `dependencyType`, zero-based `constraintIndex`, and the original `constraint`. Error entries contain `kind` (`configuration`, `runtime`, or `report`) and `message`. A report-writing error is printed to the terminal and fails the task; it may prevent producing a report file.
 
-The initializer uses Nx 23.2.0's exported source-subpath target-default reader and merger, isolated in a compatibility adapter because devkit does not re-export these APIs. The exact Nx peer and installed-package E2E define this compatibility boundary.
+The initializer uses Nx 23.2.0's exported source-subpath target-default synthesis and merger, isolated in a compatibility adapter because devkit does not re-export these APIs. The exact Nx peer and installed-package E2E define this compatibility boundary.
 
 ## Repository verification
 

@@ -958,3 +958,75 @@ module.exports.createNodesV2 = ['**/inferred.marker', async files => files.map(f
     options: { project: 'app' },
   });
 }, 60_000);
+
+it('refuses fresh targets whose compatible unsafe defaults survive foreign executor entries', async () => {
+  json('apps/fresh-app/project.json', {
+    name: 'fresh-app',
+    tags: ['scope:app'],
+  });
+  json('apps/fresh-other/project.json', {
+    name: 'fresh-other',
+    tags: ['scope:other'],
+  });
+  json('nx.json', {
+    ...read('nx.json'),
+    targetDefaults: {
+      'check-boundaries': [
+        {
+          filter: { projects: ['fresh-app'] },
+          executor: '@hao-nx-toolkit/project-boundary:check',
+          defaultConfiguration: 'ci',
+          configurations: { ci: { project: 'fresh-other' } },
+        },
+        {
+          filter: { projects: ['fresh-app'] },
+          executor: 'nx:run-commands',
+          options: { command: 'echo unrelated' },
+        },
+      ],
+    },
+  });
+  const files = [
+    'package.json',
+    'project-boundary.config.json',
+    'nx.json',
+    'apps/fresh-app/project.json',
+    'apps/fresh-other/project.json',
+    'apps/app/project.json',
+    'projects/inferred/project.json',
+  ];
+  const before = files.map((file) =>
+    readFileSync(join(consumer, file), 'utf8'),
+  );
+  const result = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(result.code, result.text).toBe(1);
+  expect(result.text).toContain('conflicting configuration project selector');
+  expect(
+    files.map((file) => readFileSync(join(consumer, file), 'utf8')),
+  ).toEqual(before);
+  expect(read('apps/fresh-app/project.json').targets).toBeUndefined();
+  // Independently demonstrate the unsafe effective graph that initialization
+  // refused to create: Nx keeps compatible ci and drops the foreign executor.
+  json('apps/fresh-app/project.json', {
+    ...read('apps/fresh-app/project.json'),
+    targets: {
+      'check-boundaries': {
+        executor: '@hao-nx-toolkit/project-boundary:check',
+        options: { project: 'fresh-app' },
+      },
+    },
+  });
+  const graph = await pnpm(['nx', 'show', 'project', 'fresh-app', '--json']);
+  expect(graph.code, graph.text).toBe(0);
+  expect(parsedJson(graph.text).targets['check-boundaries']).toMatchObject({
+    executor: '@hao-nx-toolkit/project-boundary:check',
+    defaultConfiguration: 'ci',
+    options: { project: 'fresh-app' },
+    configurations: { ci: { project: 'fresh-other' } },
+  });
+}, 60_000);

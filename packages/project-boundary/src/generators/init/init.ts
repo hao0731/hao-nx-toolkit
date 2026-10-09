@@ -14,7 +14,7 @@ import { existsSync } from 'node:fs';
 import { join, normalize } from 'node:path';
 import type { InitGeneratorSchema } from './schema';
 import {
-  readTargetDefaultsForTarget,
+  readGeneratedTargetDefaults,
   mergeTargetConfigurations,
 } from './target-defaults';
 
@@ -147,15 +147,7 @@ export async function initGenerator(
           `${name} target ${targetName} already exists with a different executor`,
         );
       const lookup = (key: string) =>
-        readTargetDefaultsForTarget(key, defaults, executor, {
-          projectName: name,
-          projectNode: {
-            name,
-            type: project.projectType === 'application' ? 'app' : 'lib',
-            data: project,
-          },
-          // Explicit generated targets originate in Nx's default project/package plugins.
-        }) ?? {};
+        readGeneratedTargetDefaults(key, defaults, executor, project, name);
       const inherited = lookup(targetName);
       const current =
         targetName === 'check-boundaries-all' &&

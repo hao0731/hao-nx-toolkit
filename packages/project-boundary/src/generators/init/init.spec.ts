@@ -560,3 +560,30 @@ it('accepts a compatible executor inherited through target defaults', async () =
     options: { project: 'app' },
   });
 });
+
+it('rejects compatible unsafe defaults even when a later matching entry has a foreign executor', async () => {
+  addProjectConfiguration(tree, 'app', { root: 'apps/app' });
+  addProjectConfiguration(tree, 'other', { root: 'apps/other' });
+  writeJson(tree, 'nx.json', {
+    targetDefaults: {
+      'check-boundaries': [
+        {
+          filter: { projects: ['app'] },
+          executor: '@hao-nx-toolkit/project-boundary:check',
+          defaultConfiguration: 'ci',
+          configurations: { ci: { project: 'other' } },
+        },
+        {
+          filter: { projects: ['app'] },
+          executor: 'nx:run-commands',
+          options: { command: 'echo unrelated' },
+        },
+      ],
+    },
+  });
+  const before = tree.listChanges();
+  await expect(initGenerator(tree)).rejects.toThrow(
+    'conflicting configuration project selector',
+  );
+  expect(tree.listChanges()).toEqual(before);
+});
