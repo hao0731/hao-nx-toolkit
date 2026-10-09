@@ -1,46 +1,64 @@
-# Project boundary
+# @hao-nx-toolkit/project-boundary
 
-Check tag-based project dependency boundaries using the Nx project graph. This plugin runs independently of Nx Conformance and does not require its runtime or Enterprise license. The supported and required Nx peer version is exactly 23.2.0; this is not a claim of complete Conformance behavioral compatibility.
+Keep dependencies between your Nx projects within the boundaries you define. This plugin reads the Nx project graph and checks each project's dependencies against rules based on project tags.
+
+For example, you can allow a store application to depend on shared libraries while preventing production projects from depending on testing utilities. Checks run as Nx tasks, so you can use them locally and in CI.
+
+The plugin supports workspace-wide, per-project, and affected checks, plus optional JSON reports. It runs independently of Nx Conformance and does not require an Enterprise license.
+
+## Compatibility
+
+This version requires **Nx 23.2.0 exactly**. See the [toolkit version compatibility table](../../README.md#nx-version-compatibility) when choosing a version for your workspace.
 
 ## Install and initialize
+
+Run these commands in your existing Nx workspace:
 
 ```bash
 pnpm add -D @hao-nx-toolkit/project-boundary
 pnpm nx g @hao-nx-toolkit/project-boundary:init
 ```
 
-In a pnpm workspace, add `-w` to the installation command when installing at its root. Initialization adds a `check-boundaries` target to every existing Nx project and a separate `check-boundaries-all` target to the root project and creates `project-boundary.config.json` with an editor schema reference. It preserves existing configuration bytes and unrelated targets. A conflicting target using another executor is an error. Initialization resolves Nx executor, name, wildcard, and filtered array defaults before validating source selection. Defaults are synthesized with the same per-entry compatibility checks as the project graph, so unrelated executors cannot hide source conflicts. Migrated workspace targets retain inherited default and named configurations; ordinary targets continue to inherit non-scope settings from Nx. Repeating initialization includes newly added projects, keeps existing non-scope target options, and sets `cache: false` so graph, tags, configuration, and report changes are checked on every run.
+When installing at the root of a pnpm workspace, use `pnpm add -Dw @hao-nx-toolkit/project-boundary` for the first command.
 
-The initial `depConstraints: []` grants no permissions: sources with outgoing project dependencies fail until rules cover them. Fill in your policy before using the check in CI.
+Initialization:
 
-Use the root project name printed by initialization. You can also find it with `pnpm nx show projects` and inspect `pnpm nx show project <root-project> --json`.
+- Creates `project-boundary.config.json` at the workspace root with a schema reference for editor support.
+- Adds a `check-boundaries` target to every existing project.
+- Adds a `check-boundaries-all` target to the root project and prints the command to run it.
+- Preserves existing boundary rules and unrelated targets, including inferred build and test targets.
 
-```bash
-# Entire workspace
-pnpm nx run <root-project>:check-boundaries-all
+The generated file starts with `depConstraints: []`. **Configure your rules before running checks**: a project with outgoing project dependencies fails if no rule matches it.
 
-# One project's direct outgoing dependencies
-pnpm nx run my-app:check-boundaries
+Rerun the initializer after adding projects. It includes the new projects and retains your existing rules. If a boundary target already uses another executor or has a conflicting project selector, initialization fails before writing changes.
 
-# Optional JSON report, relative to the workspace root or absolute
-pnpm nx run <root-project>:check-boundaries-all -- --outputFile=reports/boundaries.json
+## Configure boundary rules
+
+Edit `project-boundary.config.json` at the workspace root. A rule selects the **source project** (the project that depends on another project) and defines which **target projects** it may depend on.
+
+### Example: separate store, shared, and testing code
+
+First, assign tags in your projects' Nx configuration. The following example uses three projects:
+
+| Project      | Tags                              |
+| ------------ | --------------------------------- |
+| `store-app`  | `scope:store`, `role:production`  |
+| `shared-lib` | `scope:shared`, `role:production` |
+| `test-utils` | `scope:shared`, `role:testing`    |
+
+For a project configured in `project.json`, add a `tags` field. For example, `store-app` uses:
+
+```json
+{
+  "tags": ["scope:store", "role:production"]
+}
 ```
 
-Each project target fixes `options.project` to its own project name. Native affected execution uses Nx's selection and dependent propagation:
+For projects configured through `package.json`, put the same array in `nx.tags`.
 
-```bash
-pnpm nx affected -t check-boundaries --base=main --head=HEAD --output-style=static
-```
+Tag names are your choice; the plugin does not require a particular tag taxonomy.
 
-Nx also selects reverse dependents: changing a dependency target's tags rechecks its upstream sources. The executor retains the complete project graph to evaluate unchanged dependency targets. Targets include the shared configuration file as a workspace input, so policy changes select all configured projects even though caching is disabled. Rerun initialization after adding projects. Existing generated root workspace targets migrate to `check-boundaries-all`; conflicting executors or project selectors fail before any writes.
-
-`--base=main --head=HEAD` selects committed changes. For current uncommitted changes, use Nx's `--uncommitted` selection. Checks read the current workspace; staged-only snapshot validation is not provided.
-
-Initialization stores minimal target configuration for inferred projects and preserves their inferred build/test targets.
-
-When overriding selection on the workspace target, the `--` separator before `--project` is required: Nx otherwise treats it as its own project-selection argument. You can combine `--project` and `--outputFile` after the separator.
-
-## Shared configuration
+Then configure these rules:
 
 ```json
 {
@@ -51,6 +69,10 @@ When overriding selection on the workspace target, the `--` separator before `--
       "onlyDependOnProjectsWithTags": ["scope:store", "scope:shared"]
     },
     {
+      "sourceTag": "scope:shared",
+      "onlyDependOnProjectsWithTags": ["scope:shared"]
+    },
+    {
       "allSourceTags": ["scope:*", "role:production"],
       "notDependOnProjectsWithTags": ["role:testing"]
     }
@@ -58,52 +80,144 @@ When overriding selection on the workspace target, the `--` separator before `--
 }
 ```
 
-Each constraint has exactly one selector: `sourceTag`, or a nonempty `allSourceTags` array. All entries in `allSourceTags` must match the source. All constraints matching a source apply together with AND; entries inside one allowed-target list are alternatives (OR). A target matching any denied pattern fails even when an allowed pattern also matches.
+With these tags and rules:
 
-Both target lists are optional. A matching source-only constraint imposes no target restriction. An empty `onlyDependOnProjectsWithTags` allows no project targets; an empty `notDependOnProjectsWithTags` forbids none.
+| Dependency                 | Result | Reason                                                                                                    |
+| -------------------------- | ------ | --------------------------------------------------------------------------------------------------------- |
+| `store-app` → `shared-lib` | Pass   | Store projects may depend on shared projects, and the target is production code.                          |
+| `shared-lib` → `store-app` | Fail   | Shared projects may only depend on shared projects.                                                       |
+| `store-app` → `test-utils` | Fail   | The target has an allowed scope, but production projects cannot depend on projects tagged `role:testing`. |
 
-Tag patterns support:
+### Configuration fields
 
-- Exact strings such as `scope:store`.
-- Universal `*`, including projects without tags.
-- Basic `*` globs such as `scope:*`, anchored to the entire tag. Every other character is literal; `?` and brackets are not glob operators.
-- Slash-delimited JavaScript regular expressions, such as `/^scope:(store|shared)$/`, without flags. Regex matches follow JavaScript search semantics; use anchors when a full-tag match is needed.
+The root object requires a `depConstraints` array. `$schema` is optional and must be a string; the generated reference provides editor completion and validation.
 
-Malformed regular expressions are configuration errors even in constraints that do not match any selected project. Unknown configuration fields, constraint fields, and executor options are errors. The optional root `$schema` annotation must be a string.
+Each rule accepts these fields:
 
-## Scope and failures
+| Field                          | Value                           | Meaning                                                              |
+| ------------------------------ | ------------------------------- | -------------------------------------------------------------------- |
+| `sourceTag`                    | Nonempty string                 | Apply the rule when a source project matches this tag pattern.       |
+| `allSourceTags`                | Nonempty array of tag patterns  | Apply the rule when the source matches every pattern in the array.   |
+| `onlyDependOnProjectsWithTags` | Array of tag patterns, optional | Each dependency target must match at least one pattern in the array. |
+| `notDependOnProjectsWithTags`  | Array of tag patterns, optional | Reject any dependency target that matches a pattern in the array.    |
 
-Workspace checks inspect every project's direct outgoing project dependencies. Project checks inspect only the selected source: incoming dependencies and edges originating from downstream projects are outside that scope. Allowed and denied tags are evaluated against each direct target; deny checks do not walk transitive dependencies.
+Use **exactly one** of `sourceTag` or `allSourceTags` in each rule. Every tag pattern must be a nonempty string. Unknown fields and invalid patterns fail the check.
 
-Static, dynamic, and implicit edges all follow the same rules. External npm packages are excluded. A source with outgoing project dependencies that matches no constraint fails. An isolated source, or one depending only on external packages, does not fail merely because no constraint covers it.
+All rules matching a source project apply together: every matching rule must pass. A denied target fails even if an allowed pattern also matches it.
 
-Violations return a nonzero exit code and show the source, target, tags, and violated constraint. Missing or invalid configuration, unknown selected projects, graph failures, and report-writing failures also fail the task. Report output cannot overwrite the input configuration.
+Omitting an allowed or denied list adds no restriction of that kind. An empty `onlyDependOnProjectsWithTags: []` allows no project dependencies; an empty `notDependOnProjectsWithTags: []` forbids none. A rule with only a source selector imposes no target restriction.
 
-The first version does not provide dependency exceptions, project exclusions, cycle checks, buildable-project checks, or tag cardinality validation. It does not execute arbitrary Conformance rules. Its explicit unmatched-source and direct-only deny behavior should not be presented as verified equivalence with official Conformance.
+A source with outgoing project dependencies must match at least one rule. A project with no outgoing project dependencies, or only external npm dependencies, does not need a matching rule.
 
-## JSON reports
+### Supported tag patterns
 
-`outputFile` writes reports on successful checks, violations, and configuration/runtime errors. Parent directories are created as needed. Configuration errors replace a previous success report with a failed report; callers must also check the command's exit code, particularly if the output path cannot be written.
+Patterns work in both source selectors and target lists:
 
-For parallel project targets, give each source its own report path:
+| Pattern type       | Example                     | Meaning                                                                                           |
+| ------------------ | --------------------------- | ------------------------------------------------------------------------------------------------- |
+| Exact tag          | `scope:store`               | Matches that tag exactly.                                                                         |
+| Universal          | `*`                         | Matches every project, including projects without tags.                                           |
+| Basic glob         | `scope:*`                   | Matches a whole tag starting with `scope:`. Only `*` is a wildcard; `?` and brackets are literal. |
+| Regular expression | `/^scope:(store\|shared)$/` | Matches a tag using a JavaScript regular expression enclosed in slashes, without flags.           |
+
+Regular expressions use search matching; add `^` and `$` when you want to match the whole tag. Malformed expressions fail validation even if their rule would not match any selected project.
+
+## Run checks
+
+### Entire workspace
+
+Use the root project name printed by initialization in place of `<root-project>`:
+
+```bash
+pnpm nx run <root-project>:check-boundaries-all
+```
+
+This checks every project's direct outgoing project dependencies. If you need to find project names, run `pnpm nx show projects`.
+
+### One project
+
+```bash
+pnpm nx run store-app:check-boundaries
+```
+
+This checks dependencies originating from `store-app`. It does not check projects that depend on `store-app`, or dependencies originating from its downstream projects.
+
+### Affected projects and CI
+
+To check projects affected by committed changes:
+
+```bash
+pnpm nx affected -t check-boundaries --base=main --head=HEAD --output-style=static
+```
+
+Replace `main` with your comparison branch or commit. For current uncommitted changes, use:
+
+```bash
+pnpm nx affected -t check-boundaries --uncommitted --output-style=static
+```
+
+Nx also selects reverse dependents, so changing a dependency target's tags rechecks projects that depend on it. Changes to the shared configuration select all initialized projects. Checks run without task caching and read the current workspace; staged-only snapshot validation is not supported.
+
+Checks return a nonzero exit code for boundary violations, invalid configuration, unknown project names, graph failures, or report-writing failures. You can use the command's exit code to fail CI.
+
+## Export JSON reports
+
+Add `outputFile` after the `--` separator:
+
+```bash
+pnpm nx run <root-project>:check-boundaries-all -- --outputFile=reports/boundaries.json
+```
+
+Paths are relative to the workspace root or absolute. Parent directories are created automatically. Reports are written for successful checks, violations, and configuration or runtime errors when the output path is valid and writable. The report cannot overwrite `project-boundary.config.json`.
+
+For parallel project checks, use a separate file for each project:
 
 ```bash
 pnpm nx affected -t check-boundaries --base=main --head=HEAD --output-style=static -- --outputFile='reports/{boundaryProjectName}.json'
 ```
 
-`{boundaryProjectName}` requires a selected project and expands to `project-` followed by the name's full lowercase SHA-256 digest of its UTF-8 encoding (a 72-character component). The bounded digest makes long or scoped names and path separators safe and distinguishes names even on case-insensitive filesystems. The JSON scope retains the original project name. Nx owns and interpolates `{projectName}` before CLI execution; use the plugin-owned `{boundaryProjectName}` token for safe report filenames. Literal paths still work for single checks; sharing a literal output path across parallel tasks can overwrite reports. Full workspace reports use a literal path unless a source project is explicitly selected.
+`{boundaryProjectName}` expands to `project-` followed by a SHA-256 digest of the selected project name, giving each project a safe, distinct filename. The report retains the original project name. Use this token for parallel reports; Nx interpolates `{projectName}` before the plugin runs. A literal path works for a single check, but parallel checks sharing that path can overwrite each other's reports. Workspace-wide reports use a literal path because there is no selected project.
 
-Reports have `version: 1`, a `scope` (`{ "kind": "workspace" }` or `{ "kind": "project", "project": "my-app" }`), `success`, `violations`, and `errors`. Ordering is stable across graph insertion order.
+A successful workspace report looks like this:
 
-Violation kinds are `unmatched-source`, `disallowed-target`, and `forbidden-tag`. Each has `source` and `sourceTags`. Target violations also contain `target`, `targetTags`, `dependencyType`, zero-based `constraintIndex`, and the original `constraint`. Error entries contain `kind` (`configuration`, `runtime`, or `report`) and `message`. A report-writing error is printed to the terminal and fails the task; it may prevent producing a report file.
-
-The initializer uses Nx 23.2.0's exported source-subpath target-default synthesis and merger, isolated in a compatibility adapter because devkit does not re-export these APIs. The exact Nx peer and installed-package E2E define this compatibility boundary.
-
-## Repository verification
-
-```bash
-pnpm nx run-many -t test lint typecheck build -p project-boundary
-pnpm nx run project-boundary-e2e:e2e --skipNxCache
+```json
+{
+  "version": 1,
+  "scope": { "kind": "workspace" },
+  "success": true,
+  "violations": [],
+  "errors": []
+}
 ```
 
-The E2E project packs and installs the published package contents into a temporary Nx 23.2.0 workspace, exercises real Nx commands and temporary Git commits for native affected selection, target tag propagation, shared-policy changes, inferred project initialization, and parallel JSON reports, and cleans up its workspace, archive, and isolated package store. It requires access to the npm registry on a cold cache.
+Per-project reports use `scope: { "kind": "project", "project": "store-app" }`. Report entries have these kinds:
+
+| Entry     | Kind                | Meaning                                                     |
+| --------- | ------------------- | ----------------------------------------------------------- |
+| Violation | `unmatched-source`  | A source with project dependencies has no matching rule.    |
+| Violation | `disallowed-target` | A target does not match a rule's allowed patterns.          |
+| Violation | `forbidden-tag`     | A target matches a rule's denied patterns.                  |
+| Error     | `configuration`     | Invalid configuration or options.                           |
+| Error     | `runtime`           | A failure while running the check, such as a graph failure. |
+| Error     | `report`            | A failure writing the report; the file may be unavailable.  |
+
+Violations identify the source and its tags. Target violations also include the target, its tags, the dependency type, the matching rule, and its zero-based `constraintIndex`. Errors include a message. Report ordering is stable.
+
+Always check the command's exit code as well as the report. Configuration errors replace a previous success report with a failed report when writing succeeds; a report-writing failure may leave no report file.
+
+## Advanced project selection
+
+You can select a source project through the workspace target:
+
+```bash
+pnpm nx run <root-project>:check-boundaries-all -- --project=store-app --outputFile=reports/store-app.json
+```
+
+The `--` separator before `--project` is required so Nx forwards the option to the plugin. Per-project `check-boundaries` targets already select their own source project.
+
+## Check scope and limitations
+
+- Checks cover direct static, dynamic, and implicit project dependencies from the Nx project graph. External npm packages are excluded.
+- Allowed and denied rules evaluate direct targets. They do not walk transitive dependencies.
+- Dependency exceptions, project exclusions, cycle checks, buildable-project checks, and tag cardinality validation are not provided.
+- The plugin does not execute arbitrary Nx Conformance rules or claim complete behavioral equivalence with Nx Conformance.
