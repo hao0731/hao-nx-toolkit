@@ -1,0 +1,20 @@
+package <%= packageName %>
+
+<% if (importPath) { %>import "<%= importPath %>"
+
+<% } %>type <%= typeName %> struct {
+}
+
+type <%= typeName %>Option func(*<%= typeName %>)
+
+func New<%= typeName %>(options ...<%= typeName %>Option) *<%= typeName %> {
+	handler := &<%= typeName %>{}
+	for _, option := range options {
+		option(handler)
+	}
+	return handler
+}
+
+func (handler *<%= typeName %>) Register(<%= router %>) {
+	// TODO: Implement route registration here.
+}

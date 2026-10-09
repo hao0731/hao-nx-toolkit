@@ -1,0 +1,9 @@
+{
+  "generators": {
+    "handler": {
+      "factory": "./dist/generators/handler/handler",
+      "schema": "./dist/generators/handler/schema.json",
+      "description": "Generate a Go handler skeleton for none, Gin or Echo v5."
+    }
+  }
+}

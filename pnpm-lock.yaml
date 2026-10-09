@@ -96,6 +96,20 @@ importers:
 
   e2e/project-boundary-e2e: {}
 
+  packages/golang:
+    dependencies:
+      '@nx/devkit':
+        specifier: 23.2.0
+        version: 23.2.0(nx@23.2.0(@swc-node/register@1.11.1(@swc/core@1.15.47(@swc/helpers@0.5.23))(@swc/types@0.1.28)(supports-color@7.2.0)(typescript@6.0.3))(@swc/core@1.15.47(@swc/helpers@0.5.23)))
+      tslib:
+        specifier: ^2.3.0
+        version: 2.8.1
+    devDependencies:
+      nx:
+        specifier: 23.2.0
+        version: 23.2.0(@swc-node/register@1.11.1(@swc/core@1.15.47(@swc/helpers@0.5.23))(@swc/types@0.1.28)(supports-color@7.2.0)(typescript@6.0.3))(@swc/core@1.15.47(@swc/helpers@0.5.23))
+
+
   packages/project-boundary:
     dependencies:
       '@nx/devkit':
