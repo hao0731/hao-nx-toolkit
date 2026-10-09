@@ -125,7 +125,7 @@ Names can use camelCase, PascalCase, spaces, hyphens, or underscores. Each word 
 | `http-client`, `HTTPClient`           | `HttpClientHandler`  | `http_client_handler.go`  |
 | `user`, `user-handler`, `UserHandler` | `UserHandler`        | `user_handler.go`         |
 
-A trailing `Handler` word is recognized and is not appended again. A base name is required: `handler` alone is rejected. Names must start with a letter after normalization; punctuation other than the separators above is rejected.
+A trailing `Handler` word is recognized and is not appended again. A base name is required: `handler` alone is rejected. Names must start with a letter after normalization; punctuation other than the separators above is rejected. The complete normalized type name must be a valid Go identifier. Unicode names whose case conversion introduces combining marks (for example, `İtem` or `ǰob`) are rejected before any file is written.
 
 The Go package name must be a valid identifier, cannot be a Go keyword or `_`, and must match existing Go files directly in the target directory. External test packages named `<packageName>_test` in `_test.go` files are accepted. Comments and build tags may precede the package clause; package validation checks files regardless of build tags, so directories with conditional alternative package names are rejected. Go files starting with `.` or `_` are ignored, following Go file selection conventions. Use `packageName` when the directory basename is invalid or differs from the existing package.
 

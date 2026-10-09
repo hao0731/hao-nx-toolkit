@@ -94,8 +94,17 @@ export async function handlerGenerator(
       );
   }
   const typeName =
-    words.map((word) => word[0].toUpperCase() + word.slice(1)).join('') +
-    'Handler';
+    words
+      .map((word) => {
+        const [initial, ...rest] = word;
+        return initial.toUpperCase() + rest.join('');
+      })
+      .join('') + 'Handler';
+  if (!/^[\p{L}_][\p{L}\p{Nd}_]*$/u.test(typeName)) {
+    throw new Error(
+      'The normalized handler name must be a valid Go identifier. Unicode case conversions that introduce combining marks are unsupported.',
+    );
+  }
   const framework = options.framework ?? 'none';
   const importPath =
     framework === 'gin'

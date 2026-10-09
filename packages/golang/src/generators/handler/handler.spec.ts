@@ -151,3 +151,23 @@ it.each([
     expect(tree.listChanges()).toEqual(before);
   },
 );
+
+it.each(['İtem', 'ǰob'])(
+  'rejects Unicode case conversion that produces an invalid Go identifier: %s',
+  async (name) => {
+    const tree = createTreeWithEmptyWorkspace();
+    const before = tree.listChanges();
+    await expect(
+      handlerGenerator(tree, { name, directory: 'handlers' }),
+    ).rejects.toThrow(/normalized.*identifier/);
+    expect(tree.listChanges()).toEqual(before);
+  },
+);
+
+it('normalizes an initial Unicode letter outside the BMP by code point', async () => {
+  const tree = createTreeWithEmptyWorkspace();
+  await handlerGenerator(tree, { name: '𐐨item', directory: 'handlers' });
+  expect(tree.read('handlers/𐐨item_handler.go', 'utf-8')).toContain(
+    'type 𐐀itemHandler struct',
+  );
+});
