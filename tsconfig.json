@@ -11,6 +11,9 @@
     },
     {
       "path": "./packages/golang"
+    },
+    {
+      "path": "./e2e/golang-e2e"
     }
   ],
   "compilerOptions": {}

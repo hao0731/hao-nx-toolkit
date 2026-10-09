@@ -1,0 +1,36 @@
+{
+  "name": "golang-e2e",
+  "version": "0.0.1",
+  "private": true,
+  "nx": {
+    "projectType": "application",
+    "sourceRoot": "e2e/golang-e2e/src",
+    "implicitDependencies": [
+      "golang"
+    ],
+    "targets": {
+      "e2e": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "dependsOn": [
+          "^build"
+        ],
+        "options": {
+          "command": "vitest",
+          "cwd": "e2e/golang-e2e"
+        }
+      },
+      "test": {
+        "cache": false,
+        "dependsOn": [
+          "^build"
+        ]
+      }
+    },
+    "tags": [
+      "lang:golang",
+      "role:testing"
+    ]
+  },
+  "type": "module"
+}

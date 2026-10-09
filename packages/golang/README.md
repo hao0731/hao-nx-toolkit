@@ -138,3 +138,16 @@ An existing target file always causes an error, even if its content matches the 
 - Leaves route registration for you to implement, with a TODO comment in every framework template.
 - Does not create custom options, routers, endpoints, or application tests.
 - Checks the destination file and package clauses, but does not detect conflicting Go type declarations in other files.
+
+## Development verification
+
+From this repository's root, run:
+
+```bash
+pnpm nx run-many -p golang -t lint test build typecheck
+pnpm nx e2e golang-e2e
+```
+
+The E2E suite packs the plugin, installs it into a temporary Nx 23.2.0 consumer, and runs the real CLI. It checks the documented generation workflows, naming, package validation, refusal to overwrite, dry-run behavior, and preservation of dependency/configuration files.
+
+Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles all three templates, runs constructor option and registration tests, and checks generated files with `gofmt`. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. CI installs the same Go version in both pull request and main branch jobs.

@@ -1,0 +1,317 @@
+import { execFile } from 'node:child_process';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+
+const execute = promisify(execFile);
+const repository = fileURLToPath(new URL('../../../', import.meta.url));
+let temporary: string;
+let consumer: string;
+let environment: NodeJS.ProcessEnv;
+let sourceManifest: string;
+let sourceLock: string;
+
+function write(path: string, content: string) {
+  mkdirSync(join(consumer, path, '..'), { recursive: true });
+  writeFileSync(join(consumer, path), content);
+}
+function json(path: string, value: unknown) {
+  write(path, JSON.stringify(value, null, 2) + '\n');
+}
+function read(path: string) {
+  return readFileSync(join(consumer, path), 'utf8');
+}
+async function command(program: string, args: string[], cwd = consumer) {
+  try {
+    const result = await execute(program, args, {
+      cwd,
+      env: environment,
+      timeout: 180_000,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return { code: 0, text: result.stdout + result.stderr };
+  } catch (error) {
+    const failure = error as Error & {
+      code: number | string;
+      stdout?: string;
+      stderr?: string;
+    };
+    return {
+      code: failure.code,
+      text: `${failure.stdout ?? ''}${failure.stderr ?? ''}${failure.message}`,
+    };
+  }
+}
+async function generate(args: string[], cwd = consumer) {
+  return command(
+    'pnpm',
+    ['nx', 'g', '@hao-nx-toolkit/golang:handler', '--no-interactive', ...args],
+    cwd,
+  );
+}
+
+beforeAll(async () => {
+  sourceManifest = readFileSync(
+    join(repository, 'packages/golang/package.json'),
+    'utf8',
+  );
+  sourceLock = readFileSync(join(repository, 'pnpm-lock.yaml'), 'utf8');
+  temporary = mkdtempSync(join(tmpdir(), 'golang-e2e-'));
+  consumer = join(temporary, 'consumer');
+  mkdirSync(consumer);
+  const npmrc = join(consumer, '.npmrc');
+  writeFileSync(
+    npmrc,
+    `registry=https://registry.npmjs.org/\nstore-dir=${join(temporary, 'store')}\n`,
+  );
+  environment = {
+    ...process.env,
+    npm_config_userconfig: npmrc,
+    PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: 'false',
+    NX_DAEMON: 'false',
+    NX_ISOLATE_PLUGINS: 'false',
+    NX_NO_CLOUD: 'true',
+    FORCE_COLOR: '0',
+    GOPATH: join(temporary, 'go'),
+    GOMODCACHE: join(temporary, 'go-mod'),
+    GOCACHE: join(temporary, 'go-build'),
+    GOTOOLCHAIN: 'local',
+    GOENV: 'off',
+    GOFLAGS: '-modcacherw',
+    TEST_TELEMETRY_DIR: join(temporary, 'go-telemetry'),
+  };
+  // Child CLIs must discover the fixture, not inherit the outer Nx task workspace.
+  for (const key of Object.keys(environment))
+    if (key.startsWith('NX_')) delete environment[key];
+  Object.assign(environment, {
+    NX_DAEMON: 'false',
+    NX_ISOLATE_PLUGINS: 'false',
+    NX_NO_CLOUD: 'true',
+    NX_WORKSPACE_ROOT_PATH: consumer,
+  });
+  delete environment.NODE_PATH;
+  const tarball = join(temporary, 'golang.tgz');
+  const packed = await command(
+    'pnpm',
+    ['pack', '--out', tarball],
+    join(repository, 'packages/golang'),
+  );
+  expect(packed.code, packed.text).toBe(0);
+  json('package.json', {
+    name: 'golang-fixture',
+    private: true,
+    devDependencies: {
+      nx: '23.2.0',
+      '@hao-nx-toolkit/golang': `file:${tarball}`,
+    },
+  });
+  json('nx.json', { analytics: false, neverConnectToCloud: true });
+  write(
+    'pnpm-workspace.yaml',
+    `packages: []\nstoreDir: ${JSON.stringify(join(temporary, 'store'))}\nallowBuilds:\n  nx: true\n`,
+  );
+  const installed = await command('pnpm', [
+    'install',
+    '--no-frozen-lockfile',
+    '--store-dir',
+    join(temporary, 'store'),
+  ]);
+  expect(installed.code, installed.text).toBe(0);
+}, 240_000);
+
+afterAll(() => {
+  try {
+    expect(
+      readFileSync(join(repository, 'packages/golang/package.json'), 'utf8'),
+    ).toBe(sourceManifest);
+    expect(readFileSync(join(repository, 'pnpm-lock.yaml'), 'utf8')).toBe(
+      sourceLock,
+    );
+  } finally {
+    if (temporary)
+      rmSync(temporary, {
+        recursive: true,
+        force: true,
+        maxRetries: 5,
+        retryDelay: 100,
+      });
+  }
+});
+
+it('generates a default handler through the installed plugin and real Nx CLI', async () => {
+  expect(
+    JSON.parse(read('node_modules/@hao-nx-toolkit/golang/package.json'))
+      .version,
+  ).toBe(JSON.parse(sourceManifest).version);
+  const result = await generate([
+    '--name=user-profile',
+    '--directory=apps/api/handlers',
+  ]);
+  expect(result.code, result.text).toBe(0);
+  expect(read('apps/api/handlers/user_profile_handler.go')).toContain(
+    'type UserProfileHandler struct',
+  );
+}, 60_000);
+
+it('generates each framework without changing dependency files or Nx configuration', async () => {
+  write(
+    'go/go.mod',
+    'module example.com/handlers\n\ngo 1.26.2\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.12.0\n\tgithub.com/labstack/echo/v5 v5.0.0\n)\n',
+  );
+  write('go/go.sum', '');
+  const protectedFiles = ['go/go.mod', 'go/go.sum', 'package.json', 'nx.json'];
+  const before = protectedFiles.map(read);
+  for (const [framework, importPath, signature] of [
+    ['none', '', 'Register()'],
+    ['gin', 'github.com/gin-gonic/gin', 'Register(router gin.IRoutes)'],
+    ['echo', 'github.com/labstack/echo/v5', 'Register(router *echo.Echo)'],
+  ]) {
+    const result = await generate([
+      '--name=user',
+      `--directory=go/${framework}`,
+      `--framework=${framework}`,
+    ]);
+    expect(result.code, result.text).toBe(0);
+    const output = read(`go/${framework}/user_handler.go`);
+    expect(output).toContain(signature);
+    expect(output).toContain('// TODO: Implement route registration here.');
+    if (importPath) {
+      expect(output).toContain(`import "${importPath}"`);
+      expect(result.text).toContain(`go get ${importPath}`);
+    }
+  }
+  expect(protectedFiles.map(read)).toEqual(before);
+}, 60_000);
+
+it('uses workspace-relative paths from a nested working directory and normalizes names', async () => {
+  mkdirSync(join(consumer, 'nested'), { recursive: true });
+  const result = await generate(
+    [
+      '--name=HTTPClient',
+      '--directory=apps/api/transport-handlers',
+      '--packageName=transport',
+    ],
+    join(consumer, 'nested'),
+  );
+  expect(result.code, result.text).toBe(0);
+  expect(read('apps/api/transport-handlers/http_client_handler.go')).toContain(
+    'package transport\n\ntype HttpClientHandler struct',
+  );
+  for (const name of ['user', 'user-handler', 'UserHandler']) {
+    const generated = await generate([
+      `--name=${name}`,
+      `--directory=names/${name}`,
+      '--packageName=handlers',
+    ]);
+    expect(generated.code, generated.text).toBe(0);
+    expect(read(`names/${name}/user_handler.go`)).toContain(
+      'type UserHandler struct',
+    );
+  }
+}, 60_000);
+
+it('refuses overwrites, package conflicts and invalid input, preserving existing files', async () => {
+  write(
+    'conflicts/user_handler.go',
+    'package conflicts\n// existing implementation\n',
+  );
+  const original = read('conflicts/user_handler.go');
+  const overwrite = await generate(['--name=user', '--directory=conflicts']);
+  expect(overwrite.code, overwrite.text).not.toBe(0);
+  expect(overwrite.text).toContain('already exists');
+  expect(read('conflicts/user_handler.go')).toBe(original);
+  write('mismatch/existing.go', '/* package mismatch */\npackage other\n');
+  const conflict = await generate(['--name=user', '--directory=mismatch']);
+  expect(conflict.code, conflict.text).not.toBe(0);
+  expect(conflict.text).toContain('package');
+  const badName = await generate(['--name=123-user', '--directory=invalid']);
+  expect(badName.code, badName.text).not.toBe(0);
+  expect(badName.text).toContain('name must start with a letter');
+  const badFramework = await generate([
+    '--name=user',
+    '--directory=invalid',
+    '--framework=echo-v4',
+  ]);
+  expect(badFramework.code, badFramework.text).not.toBe(0);
+  expect(badFramework.text).toContain('framework');
+}, 60_000);
+
+it('supports dry-run without writing a handler', async () => {
+  const result = await generate([
+    '--name=preview',
+    '--directory=previews',
+    '--dry-run',
+  ]);
+  expect(result.code, result.text).toBe(0);
+  expect(result.text).toContain('previews/preview_handler.go');
+  expect(() => read('previews/preview_handler.go')).toThrow(/ENOENT/);
+}, 60_000);
+
+it('compiles real frameworks, applies options once in order to the returned pointer, and emits gofmt-clean code', async () => {
+  for (const framework of ['none', 'gin', 'echo']) {
+    const importPath =
+      framework === 'gin'
+        ? 'github.com/gin-gonic/gin'
+        : framework === 'echo'
+          ? 'github.com/labstack/echo/v5'
+          : '';
+    const register =
+      framework === 'gin'
+        ? 'router := gin.New()\n\thandler.Register(router)\n\thandler.Register(router.Group("/api"))'
+        : framework === 'echo'
+          ? 'handler.Register(echo.New())'
+          : 'handler.Register()';
+    write(
+      `go/${framework}/user_handler_test.go`,
+      `package ${framework}
+
+import (
+    "reflect"
+    "testing"
+    ${importPath ? `"${importPath}"` : ''}
+)
+
+func TestConstructorAndRegistration(t *testing.T) {
+    var observed *UserHandler
+    calls := []int{}
+    handler := NewUserHandler(
+        func(h *UserHandler) { observed = h; calls = append(calls, 1) },
+        func(h *UserHandler) {
+            if h != observed { t.Fatal("options received different pointers") }
+            calls = append(calls, 2)
+        },
+    )
+    if handler == nil || handler != observed { t.Fatal("constructor did not return the option pointer") }
+    if !reflect.DeepEqual(calls, []int{1, 2}) { t.Fatalf("unexpected calls: %v", calls) }
+    if NewUserHandler() == nil { t.Fatal("constructor without options returned nil") }
+    ${register}
+}
+`,
+    );
+    const formatted = await command(
+      'gofmt',
+      ['-l', `${framework}/user_handler.go`],
+      join(consumer, 'go'),
+    );
+    expect(formatted.code, formatted.text).toBe(0);
+    expect(formatted.text).toBe('');
+  }
+  const tidy = await command('go', ['mod', 'tidy'], join(consumer, 'go'));
+  expect(tidy.code, tidy.text).toBe(0);
+  // Negative control: the Go validation must reject a broken generated artifact.
+  write('go/none/broken.go', 'package none\nvar _ = missingSymbol\n');
+  const broken = await command('go', ['test', './none'], join(consumer, 'go'));
+  expect(broken.code, broken.text).not.toBe(0);
+  expect(broken.text).toContain('undefined: missingSymbol');
+  rmSync(join(consumer, 'go/none/broken.go'));
+  const compiled = await command('go', ['test', './...'], join(consumer, 'go'));
+  expect(compiled.code, compiled.text).toBe(0);
+}, 240_000);
