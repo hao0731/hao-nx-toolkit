@@ -1,6 +1,6 @@
 # @hao-nx-toolkit/golang
 
-Create Go handler, service, and repository skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
+Create Go handler, service, repository, and config skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
 
 Choose a framework-free skeleton, Gin, or Echo v5. The target directory does not need to be an Nx project or contain a Go module.
 
@@ -110,6 +110,52 @@ The repository skeleton uses `UserProfileRepository`, `UserProfileRepositoryOpti
 
 Names become PascalCase types and snake_case filenames with the appropriate suffix. `UserService` and `user-service` both produce `UserService` in `user_service.go`; `UserRepository` and `user-repository` both produce `UserRepository` in `user_repository.go`. A suffix alone (`service` or `repository`) is rejected because a base name is required. Use `--packageName=storage` to override the output directory's package name when needed.
 
+## Generate config
+
+```bash
+pnpm nx g @hao-nx-toolkit/golang:config \
+  --directory=apps/api/internal/config
+```
+
+This creates `apps/api/internal/config/config.go`. `directory` is the only generator option and refers to the final directory; the generator does not add a `config` subdirectory. The filename is always `config.go` and the package is always `config`, even when the directory has a different name. `name` and `packageName` are not supported.
+
+```go
+package config
+
+type Config struct {
+	// TODO: Need to implement config fields
+}
+
+type loadOptions struct {
+	path string
+}
+
+type LoadOption func(*loadOptions)
+
+func WithPath(path string) LoadOption {
+	return func(options *loadOptions) {
+		options.path = path
+	}
+}
+
+func Load(options ...LoadOption) (*Config, error) {
+	var opts loadOptions
+	for _, option := range options {
+		option(&opts)
+	}
+
+	var result Config
+
+	// TODO: Need to implement loading and validation using opts
+
+	return &result, nil
+}
+```
+
+After implementing loading and validation, callers can supply a path with `config.Load(config.WithPath("config.yaml"))`. Options run once in order before the loading TODO; repeated `WithPath` calls keep the last path. Without `WithPath`, the private path starts as an empty string. The skeleton currently returns an empty `Config` and nil error, performs no I/O, and supplies no default path, file format, parser, or validation. Add those behaviors yourself using `opts.path`.
+
+The same workspace-relative path and existing-file safeguards apply. Existing Go files must use `package config` (or `config_test` in external test files); a different directory package causes an error before generation. Existing `config.go` files are never overwritten.
+
 ## Framework templates
 
 ### Gin
@@ -172,7 +218,7 @@ An existing target file always causes an error, even if its content matches the 
 
 - Generates only the requested Go skeleton file; does not modify `go.mod`, `go.sum`, Nx projects, or dependency declarations.
 - Does not run `go`, `gofmt`, or dependency installation. Templates are checked for `gofmt` formatting during plugin testing.
-- Leaves route registration for you to implement, with a TODO comment in every framework template.
+- Leaves route registration and config loading/validation for you to implement, with TODO comments in the relevant templates.
 - Does not create custom options, routers, endpoints, or application tests.
 - Checks the destination file and package clauses, but does not detect conflicting Go type declarations in other files.
 

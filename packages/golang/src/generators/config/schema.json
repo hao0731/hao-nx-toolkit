@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "GolangConfig",
+  "title": "Generate a Go config",
+  "type": "object",
+  "properties": {
+    "directory": {
+      "type": "string",
+      "description": "Final target directory relative to the Nx workspace root. The package is always config.",
+      "minLength": 1
+    }
+  },
+  "required": ["directory"],
+  "additionalProperties": false
+}

@@ -14,6 +14,11 @@
       "factory": "./dist/generators/repository/repository",
       "schema": "./dist/generators/repository/schema.json",
       "description": "Generate a Go repository skeleton with functional constructor options."
+    },
+    "config": {
+      "factory": "./dist/generators/config/config",
+      "schema": "./dist/generators/config/schema.json",
+      "description": "Generate a Go config skeleton with functional loading options."
     }
   }
 }

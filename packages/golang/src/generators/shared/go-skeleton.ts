@@ -22,20 +22,7 @@ export function normalizeGoSkeleton(
       'name must contain letters, digits, spaces, underscores or hyphens.',
     );
   }
-  if (
-    typeof options.directory !== 'string' ||
-    !options.directory.trim() ||
-    options.directory.includes('\\') ||
-    options.directory.includes('\0') ||
-    posix.isAbsolute(options.directory) ||
-    /^[A-Za-z]:/.test(options.directory) ||
-    options.directory.split('/').includes('..')
-  ) {
-    throw new Error(
-      'directory must be a nonempty workspace-root relative path without parent traversal.',
-    );
-  }
-  const directory = posix.normalize(options.directory);
+  const directory = normalizeGoDirectory(options.directory);
   const packageName = options.packageName ?? basename(directory);
   const keywords = new Set(
     'break default func interface select case defer go map struct chan else goto package switch const fallthrough if range type continue for import return var'.split(
@@ -66,6 +53,44 @@ export function normalizeGoSkeleton(
   const fileName = words.join('_') + '_' + kind;
   if (tree.exists(directory + '/' + fileName + '.go'))
     throw new Error(`Target ${kind} file already exists.`);
+  assertGoPackage(tree, directory, packageName);
+  const typeName =
+    words
+      .map((word) => {
+        const [initial, ...rest] = word;
+        return initial.toUpperCase() + rest.join('');
+      })
+      .join('') + suffix;
+  if (!/^[\p{L}_][\p{L}\p{Nd}_]*$/u.test(typeName)) {
+    throw new Error(
+      `The normalized ${kind} name must be a valid Go identifier. Unicode case conversions that introduce combining marks are unsupported.`,
+    );
+  }
+  return { directory, packageName, fileName, typeName };
+}
+
+export function normalizeGoDirectory(directory: string) {
+  if (
+    typeof directory !== 'string' ||
+    !directory.trim() ||
+    directory.includes('\\') ||
+    directory.includes('\0') ||
+    posix.isAbsolute(directory) ||
+    /^[A-Za-z]:/.test(directory) ||
+    directory.split('/').includes('..')
+  ) {
+    throw new Error(
+      'directory must be a nonempty workspace-root relative path without parent traversal.',
+    );
+  }
+  return posix.normalize(directory);
+}
+
+export function assertGoPackage(
+  tree: Tree,
+  directory: string,
+  packageName: string,
+) {
   for (const file of tree
     .children(directory)
     .filter((file) => file.endsWith('.go') && !/^[._]/.test(file))) {
@@ -88,17 +113,4 @@ export function normalizeGoSkeleton(
           '.',
       );
   }
-  const typeName =
-    words
-      .map((word) => {
-        const [initial, ...rest] = word;
-        return initial.toUpperCase() + rest.join('');
-      })
-      .join('') + suffix;
-  if (!/^[\p{L}_][\p{L}\p{Nd}_]*$/u.test(typeName)) {
-    throw new Error(
-      `The normalized ${kind} name must be a valid Go identifier. Unicode case conversions that introduce combining marks are unsupported.`,
-    );
-  }
-  return { directory, packageName, fileName, typeName };
 }
