@@ -8,6 +8,12 @@
     },
     {
       "path": "./e2e/project-boundary-e2e"
+    },
+    {
+      "path": "./packages/golang"
+    },
+    {
+      "path": "./e2e/golang-e2e"
     }
   ],
   "compilerOptions": {}

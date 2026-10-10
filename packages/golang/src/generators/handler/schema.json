@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "GolangHandler",
+  "title": "Generate a Go handler",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Handler base name, converted to PascalCase with a Handler suffix.",
+      "minLength": 1
+    },
+    "directory": {
+      "type": "string",
+      "description": "Target directory relative to the Nx workspace root.",
+      "minLength": 1
+    },
+    "packageName": {
+      "type": "string",
+      "description": "Go package name. Defaults to the target directory basename."
+    },
+    "framework": {
+      "type": "string",
+      "enum": ["none", "gin", "echo"],
+      "default": "none",
+      "description": "Route registration signature. Echo uses v5."
+    }
+  },
+  "required": ["name", "directory"],
+  "additionalProperties": false
+}
