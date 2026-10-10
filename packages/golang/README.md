@@ -1,6 +1,6 @@
 # @hao-nx-toolkit/golang
 
-Create Go handler skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
+Create Go handler, service, and repository skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
 
 Choose a framework-free skeleton, Gin, or Echo v5. The target directory does not need to be an Nx project or contain a Go module.
 
@@ -73,6 +73,43 @@ pnpm nx g @hao-nx-toolkit/golang:handler \
   --packageName=transport
 ```
 
+## Generate a service or repository
+
+```bash
+pnpm nx g @hao-nx-toolkit/golang:service \
+  --name=user-profile \
+  --directory=apps/api/internal/services
+
+pnpm nx g @hao-nx-toolkit/golang:repository \
+  --name=user-profile \
+  --directory=apps/api/internal/repositories
+```
+
+These commands create `services/user_profile_service.go` and `repositories/user_profile_repository.go` under `apps/api/internal`. Each generator writes one file and accepts required `name` and `directory` options plus optional `packageName`, using the same naming, path, package validation, and overwrite protections as Handler. They do not accept `framework`.
+
+The service skeleton is:
+
+```go
+package services
+
+type UserProfileService struct {
+}
+
+type UserProfileServiceOption func(*UserProfileService)
+
+func NewUserProfileService(options ...UserProfileServiceOption) *UserProfileService {
+	service := &UserProfileService{}
+	for _, option := range options {
+		option(service)
+	}
+	return service
+}
+```
+
+The repository skeleton uses `UserProfileRepository`, `UserProfileRepositoryOption`, and `NewUserProfileRepository` with the same constructor pattern. Constructors apply each option once in the supplied order to the returned pointer. Add fields, option functions, and application methods yourself; these generators do not create a `Register` method, framework imports, or application tests.
+
+Names become PascalCase types and snake_case filenames with the appropriate suffix. `UserService` and `user-service` both produce `UserService` in `user_service.go`; `UserRepository` and `user-repository` both produce `UserRepository` in `user_repository.go`. A suffix alone (`service` or `repository`) is rejected because a base name is required. Use `--packageName=storage` to override the output directory's package name when needed.
+
 ## Framework templates
 
 ### Gin
@@ -129,11 +166,11 @@ A trailing `Handler` word is recognized and is not appended again. A base name i
 
 The Go package name must be a valid identifier, cannot be a Go keyword or `_`, and must match existing Go files directly in the target directory. External test packages named `<packageName>_test` in `_test.go` files are accepted. Comments and build tags may precede the package clause; package validation checks files regardless of build tags, so directories with conditional alternative package names are rejected. Go files starting with `.` or `_` are ignored, following Go file selection conventions. Use `packageName` when the directory basename is invalid or differs from the existing package.
 
-An existing target file always causes an error, even if its content matches the skeleton. There is no overwrite option. Validation failures occur before the handler is written.
+An existing target file always causes an error, even if its content matches the skeleton. There is no overwrite option. Validation failures occur before a generated file is written.
 
 ## Scope and limitations
 
-- Generates only the Go handler file; does not modify `go.mod`, `go.sum`, Nx projects, or dependency declarations.
+- Generates only the requested Go skeleton file; does not modify `go.mod`, `go.sum`, Nx projects, or dependency declarations.
 - Does not run `go`, `gofmt`, or dependency installation. Templates are checked for `gofmt` formatting during plugin testing.
 - Leaves route registration for you to implement, with a TODO comment in every framework template.
 - Does not create custom options, routers, endpoints, or application tests.

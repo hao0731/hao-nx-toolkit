@@ -1,0 +1,14 @@
+package <%= packageName %>
+
+type <%= typeName %> struct {
+}
+
+type <%= typeName %>Option func(*<%= typeName %>)
+
+func New<%= typeName %>(options ...<%= typeName %>Option) *<%= typeName %> {
+	repository := &<%= typeName %>{}
+	for _, option := range options {
+		option(repository)
+	}
+	return repository
+}

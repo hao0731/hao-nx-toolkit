@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "GolangService",
+  "title": "Generate a Go service",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Service base name, converted to PascalCase with a Service suffix.",
+      "minLength": 1
+    },
+    "directory": {
+      "type": "string",
+      "description": "Target directory relative to the Nx workspace root.",
+      "minLength": 1
+    },
+    "packageName": {
+      "type": "string",
+      "description": "Go package name. Defaults to the target directory basename."
+    }
+  },
+  "required": ["name", "directory"],
+  "additionalProperties": false
+}
