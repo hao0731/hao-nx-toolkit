@@ -2,7 +2,7 @@
 
 Create Go handler, service, repository, and config skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
 
-Choose a framework-free skeleton, Gin, or Echo v5. The target directory does not need to be an Nx project or contain a Go module.
+For Handler, choose a framework-free skeleton, Gin, or Echo v5. The target directory does not need to be an Nx project or contain a Go module.
 
 ## Compatibility
 
@@ -233,4 +233,4 @@ pnpm nx e2e golang-e2e
 
 The E2E suite packs the plugin, installs it into a temporary Nx 23.2.0 consumer, and runs the real CLI. It checks the documented generation workflows, naming, package validation, refusal to overwrite, dry-run behavior, and preservation of dependency/configuration files.
 
-Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles all three templates, runs constructor option and registration tests, and checks generated files with `gofmt`. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. CI installs the same Go version in both pull request and main branch jobs.
+Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles the three Handler framework variants and the Service, Repository, and Config templates, runs constructor option and registration tests, and checks generated files with `gofmt`. Config checks cover ordered options, empty initial path, repeated path overrides, and the absence of file I/O. A consumer-defined option inside the generated config package observes loading state while the loader remains a TODO. Negative controls temporarily break constructor calls and path assignment in fixture artifacts to prove the Go behavior checks detect regressions; original artifacts are restored before the final compilation. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. CI installs the same Go version in both pull request and main branch jobs.
