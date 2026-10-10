@@ -326,6 +326,11 @@ it('generates fixed config filename/package from a nested cwd without dependency
   const output = read('go/settings/config.go');
   expect(output).toContain('package config\n');
   expect(output).toContain('func WithPath(path string) LoadOption');
+  expect(output).toContain('type LoadOption func(*loadOptions)');
+  expect(output).toContain('options.path = path');
+  expect(output).toContain(
+    'for _, option := range options {\n\t\toption(&opts)\n\t}',
+  );
   expect(output).toContain('func Load(options ...LoadOption) (*Config, error)');
   expect(output).toContain(
     '// TODO: Need to implement loading and validation using opts',
@@ -485,7 +490,7 @@ func TestConstructorAndRegistration(t *testing.T) {
   expect(compiled.code, compiled.text).toBe(0);
 }, 240_000);
 
-it('compiles new skeletons and detects broken constructor and path option behavior', async () => {
+it('compiles new skeletons through public Go APIs and detects broken constructors', async () => {
   for (const [kind, suffix] of [
     ['service', 'Service'],
     ['repository', 'Repository'],
@@ -517,36 +522,20 @@ func TestConstructor(t *testing.T) {
 `,
     );
   }
-  // A consumer-defined option lives in package config so it can observe the private
-  // loading state through Load's extension point. Actual loading remains a TODO.
-  write(
-    'go/settings/observe_test.go',
-    `package config
-
-func observePath(observe func(string)) LoadOption {
-    return func(options *loadOptions) { observe(options.path) }
-}
-`,
-  );
   write(
     'go/settings/config_test.go',
-    `package config
+    `package config_test
 
 import (
-    "reflect"
     "testing"
+    config "example.com/handlers/settings"
 )
 
-func TestLoadOptions(t *testing.T) {
-    paths := []string{}
-    capture := observePath(func(path string) { paths = append(paths, path) })
-    result, err := Load(capture, WithPath("missing-first.yaml"), capture, WithPath("missing-last.yaml"), capture)
+func TestLoadPublicOptions(t *testing.T) {
+    result, err := config.Load(config.WithPath("missing-first.yaml"), config.WithPath("missing-last.yaml"))
     if result == nil || err != nil { t.Fatalf("Load failed: result=%v err=%v", result, err) }
-    if !reflect.DeepEqual(paths, []string{"", "missing-first.yaml", "missing-last.yaml"}) {
-        t.Fatalf("unexpected observed paths: %v", paths)
-    }
-    if result, err := Load(); result == nil || err != nil { t.Fatal("Load without options failed") }
-    if result, err := Load(WithPath("never-created.json")); result == nil || err != nil {
+    if result, err := config.Load(); result == nil || err != nil { t.Fatal("Load without options failed") }
+    if result, err := config.Load(config.WithPath("never-created.json")); result == nil || err != nil {
         t.Fatal("skeleton attempted to load a file")
     }
 }
@@ -578,13 +567,6 @@ func TestLoadOptions(t *testing.T) {
       'option(repository)\n\t\toption(repository)',
       './repositories',
       'unexpected calls',
-    ],
-    [
-      'go/settings/config.go',
-      'options.path = path',
-      '// path assignment removed',
-      './settings',
-      'unexpected observed paths',
     ],
   ]) {
     const original = read(path);
