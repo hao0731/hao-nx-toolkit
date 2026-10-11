@@ -1,0 +1,30 @@
+package config
+
+type Config struct {
+	// TODO: Need to implement config fields
+}
+
+type loadOptions struct {
+	path string
+}
+
+type LoadOption func(*loadOptions)
+
+func WithPath(path string) LoadOption {
+	return func(options *loadOptions) {
+		options.path = path
+	}
+}
+
+func Load(options ...LoadOption) (*Config, error) {
+	var opts loadOptions
+	for _, option := range options {
+		option(&opts)
+	}
+
+	var result Config
+
+	// TODO: Need to implement loading and validation using opts
+
+	return &result, nil
+}

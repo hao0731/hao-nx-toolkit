@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import {
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -50,10 +51,10 @@ async function command(program: string, args: string[], cwd = consumer) {
     };
   }
 }
-async function generate(args: string[], cwd = consumer) {
+async function generate(args: string[], cwd = consumer, kind = 'handler') {
   return command(
     'pnpm',
-    ['nx', 'g', '@hao-nx-toolkit/golang:handler', '--no-interactive', ...args],
+    ['nx', 'g', `@hao-nx-toolkit/golang:${kind}`, '--no-interactive', ...args],
     cwd,
   );
 }
@@ -255,6 +256,179 @@ it('supports dry-run without writing a handler', async () => {
   expect(() => read('previews/preview_handler.go')).toThrow(/ENOENT/);
 }, 60_000);
 
+it.each(['service', 'repository'])(
+  'generates %s through the packed CLI with naming, packages and dependency preservation',
+  async (kind) => {
+    const protectedFiles = [
+      'go/go.mod',
+      'go/go.sum',
+      'package.json',
+      'nx.json',
+    ];
+    const before = protectedFiles.map(read);
+    const suffix = kind === 'service' ? 'Service' : 'Repository';
+    const directory = kind === 'service' ? 'services' : 'repositories';
+    const result = await generate(
+      ['--name=user-profile', `--directory=go/${directory}`],
+      consumer,
+      kind,
+    );
+    expect(result.code, result.text).toBe(0);
+    expect(read(`go/${directory}/user_profile_${kind}.go`)).toContain(
+      `package ${directory}\n\ntype UserProfile${suffix} struct`,
+    );
+    mkdirSync(join(consumer, 'nested'), { recursive: true });
+    const nested = await generate(
+      [
+        '--name=HTTPClient',
+        `--directory=features/${kind}-components`,
+        '--packageName=components',
+      ],
+      join(consumer, 'nested'),
+      kind,
+    );
+    expect(nested.code, nested.text).toBe(0);
+    expect(
+      read(`features/${kind}-components/http_client_${kind}.go`),
+    ).toContain(`package components\n\ntype HttpClient${suffix} struct`);
+    expect(
+      existsSync(join(consumer, `nested/features/${kind}-components`)),
+    ).toBe(false);
+    for (const name of ['user', `user-${kind}`, `User${suffix}`]) {
+      const generated = await generate(
+        [
+          `--name=${name}`,
+          `--directory=names/${kind}/${name}`,
+          '--packageName=components',
+        ],
+        consumer,
+        kind,
+      );
+      expect(generated.code, generated.text).toBe(0);
+      expect(read(`names/${kind}/${name}/user_${kind}.go`)).toContain(
+        `type User${suffix} struct`,
+      );
+    }
+    expect(protectedFiles.map(read)).toEqual(before);
+  },
+  60_000,
+);
+
+it('generates fixed config filename/package from a nested cwd without dependency/config changes', async () => {
+  const protectedFiles = ['go/go.mod', 'go/go.sum', 'package.json', 'nx.json'];
+  const before = protectedFiles.map(read);
+  const result = await generate(
+    ['--directory=go/settings'],
+    join(consumer, 'nested'),
+    'config',
+  );
+  expect(result.code, result.text).toBe(0);
+  const output = read('go/settings/config.go');
+  expect(output).toContain('package config\n');
+  expect(output).toContain('func WithPath(path string) LoadOption');
+  expect(output).toContain('type LoadOption func(*loadOptions)');
+  expect(output).toContain('options.path = path');
+  expect(output).toContain(
+    'for _, option := range options {\n\t\toption(&opts)\n\t}',
+  );
+  expect(output).toContain('func Load(options ...LoadOption) (*Config, error)');
+  expect(output).toContain(
+    '// TODO: Need to implement loading and validation using opts',
+  );
+  expect(existsSync(join(consumer, 'go/settings/config'))).toBe(false);
+  expect(existsSync(join(consumer, 'nested/go/settings'))).toBe(false);
+  expect(protectedFiles.map(read)).toEqual(before);
+}, 60_000);
+
+it.each(['service', 'repository', 'config'])(
+  'protects files and rejects invalid %s CLI inputs',
+  async (kind) => {
+    const directory = `safeguards/${kind}`;
+    const filename = kind === 'config' ? 'config.go' : `user_${kind}.go`;
+    const name = kind === 'config' ? [] : ['--name=user'];
+    const target = `${directory}/${filename}`;
+    write(target, `package ${kind}\n// user implementation\n`);
+    const original = read(target);
+    const overwrite = await generate(
+      [...name, `--directory=${directory}`],
+      consumer,
+      kind,
+    );
+    expect(overwrite.code, overwrite.text).not.toBe(0);
+    expect(overwrite.text).toContain('already exists');
+    expect(read(target)).toBe(original);
+    const conflictDirectory = `safeguards/${kind}-conflict`;
+    write(
+      `${conflictDirectory}/existing.go`,
+      '/* package decoy */\npackage other\n',
+    );
+    const packageArgs = kind === 'config' ? [] : [`--packageName=${kind}`];
+    const conflict = await generate(
+      [...name, `--directory=${conflictDirectory}`, ...packageArgs],
+      consumer,
+      kind,
+    );
+    expect(conflict.code, conflict.text).not.toBe(0);
+    expect(conflict.text).toContain('package');
+    expect(read(`${conflictDirectory}/existing.go`)).toBe(
+      '/* package decoy */\npackage other\n',
+    );
+    expect(existsSync(join(consumer, conflictDirectory, filename))).toBe(false);
+    for (const path of ['../escape', '/absolute', 'C:\\escape']) {
+      const invalid = await generate(
+        [...name, `--directory=${path}`],
+        consumer,
+        kind,
+      );
+      expect(invalid.code, invalid.text).not.toBe(0);
+      expect(invalid.text).toContain('directory');
+    }
+    const schemaDirectory = `safeguards/${kind}-schema`;
+    const invalidArgs =
+      kind === 'config'
+        ? ['--name=user', '--packageName=settings']
+        : ['--framework=gin'];
+    for (const arg of invalidArgs) {
+      const invalid = await generate(
+        [...name, `--directory=${schemaDirectory}`, ...packageArgs, arg],
+        consumer,
+        kind,
+      );
+      expect(invalid.code, invalid.text).not.toBe(0);
+      expect(invalid.text).toMatch(
+        /schema|not found|not allowed|additional|property/i,
+      );
+    }
+    if (kind !== 'config') {
+      for (const invalidName of ['123-user', kind]) {
+        const invalid = await generate(
+          [
+            `--name=${invalidName}`,
+            `--directory=${schemaDirectory}`,
+            ...packageArgs,
+          ],
+          consumer,
+          kind,
+        );
+        expect(invalid.code, invalid.text).not.toBe(0);
+        expect(invalid.text).toContain('name');
+      }
+    }
+    expect(existsSync(join(consumer, schemaDirectory))).toBe(false);
+    const previewDirectory = `previews/${kind}`;
+    const preview = await generate(
+      [...name, `--directory=${previewDirectory}`, '--dry-run'],
+      consumer,
+      kind,
+    );
+    expect(preview.code, preview.text).toBe(0);
+    expect(preview.text).toContain(`${previewDirectory}/${filename}`);
+    expect(existsSync(join(consumer, previewDirectory))).toBe(false);
+    expect(read(target)).toBe(original);
+  },
+  120_000,
+);
+
 it('compiles real frameworks, applies options once in order to the returned pointer, and emits gofmt-clean code', async () => {
   for (const framework of ['none', 'gin', 'echo']) {
     const importPath =
@@ -312,6 +486,104 @@ func TestConstructorAndRegistration(t *testing.T) {
   expect(broken.code, broken.text).not.toBe(0);
   expect(broken.text).toContain('undefined: missingSymbol');
   rmSync(join(consumer, 'go/none/broken.go'));
+  const compiled = await command('go', ['test', './...'], join(consumer, 'go'));
+  expect(compiled.code, compiled.text).toBe(0);
+}, 240_000);
+
+it('compiles new skeletons through public Go APIs and detects broken constructors', async () => {
+  for (const [kind, suffix] of [
+    ['service', 'Service'],
+    ['repository', 'Repository'],
+  ]) {
+    const directory = kind === 'service' ? 'services' : 'repositories';
+    write(
+      `go/${directory}/user_profile_${kind}_test.go`,
+      `package ${directory}
+
+import (
+    "reflect"
+    "testing"
+)
+
+func TestConstructor(t *testing.T) {
+    var observed *UserProfile${suffix}
+    calls := []int{}
+    value := NewUserProfile${suffix}(
+        func(v *UserProfile${suffix}) { observed = v; calls = append(calls, 1) },
+        func(v *UserProfile${suffix}) {
+            if v != observed { t.Fatal("options received different pointers") }
+            calls = append(calls, 2)
+        },
+    )
+    if value == nil || value != observed { t.Fatal("constructor did not return the option pointer") }
+    if !reflect.DeepEqual(calls, []int{1, 2}) { t.Fatalf("unexpected calls: %v", calls) }
+    if NewUserProfile${suffix}() == nil { t.Fatal("constructor without options returned nil") }
+}
+`,
+    );
+  }
+  write(
+    'go/settings/config_test.go',
+    `package config_test
+
+import (
+    "testing"
+    config "example.com/handlers/settings"
+)
+
+func TestLoadPublicOptions(t *testing.T) {
+    result, err := config.Load(config.WithPath("missing-first.yaml"), config.WithPath("missing-last.yaml"))
+    if result == nil || err != nil { t.Fatalf("Load failed: result=%v err=%v", result, err) }
+    if result, err := config.Load(); result == nil || err != nil { t.Fatal("Load without options failed") }
+    if result, err := config.Load(config.WithPath("never-created.json")); result == nil || err != nil {
+        t.Fatal("skeleton attempted to load a file")
+    }
+}
+`,
+  );
+  const generated = [
+    'services/user_profile_service.go',
+    'repositories/user_profile_repository.go',
+    'settings/config.go',
+  ];
+  const formatted = await command(
+    'gofmt',
+    ['-l', ...generated],
+    join(consumer, 'go'),
+  );
+  expect(formatted.code, formatted.text).toBe(0);
+  expect(formatted.text).toBe('');
+  for (const [path, originalCall, brokenCall, target, failure] of [
+    [
+      'go/services/user_profile_service.go',
+      'option(service)',
+      'option(service)\n\t\toption(service)',
+      './services',
+      'unexpected calls',
+    ],
+    [
+      'go/repositories/user_profile_repository.go',
+      'option(repository)',
+      'option(repository)\n\t\toption(repository)',
+      './repositories',
+      'unexpected calls',
+    ],
+  ]) {
+    const original = read(path);
+    expect(original).toContain(originalCall);
+    try {
+      write(path, original.replace(originalCall, brokenCall));
+      const broken = await command(
+        'go',
+        ['test', target],
+        join(consumer, 'go'),
+      );
+      expect(broken.code, broken.text).not.toBe(0);
+      expect(broken.text).toContain(failure);
+    } finally {
+      write(path, original);
+    }
+  }
   const compiled = await command('go', ['test', './...'], join(consumer, 'go'));
   expect(compiled.code, compiled.text).toBe(0);
 }, 240_000);

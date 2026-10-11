@@ -7,7 +7,7 @@ A collection of practical Nx plugins for your workspace. Install the plugins you
 | Plugin                             | What it does                                                                                                | Documentation                                   |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
 | `@hao-nx-toolkit/project-boundary` | Checks tag-based project dependency boundaries using the Nx project graph, independently of Nx Conformance. | [README](./packages/project-boundary/README.md) |
-| `@hao-nx-toolkit/golang`           | Generates Go handler skeletons for framework-free code, Gin, and Echo v5.                                   | [README](./packages/golang/README.md)           |
+| `@hao-nx-toolkit/golang`           | Generates Go config, service, repository, and handler skeletons for framework-free code, Gin, and Echo v5.  | [README](./packages/golang/README.md)           |
 
 See each plugin's README for installation, configuration, and usage instructions.
 

@@ -4,6 +4,21 @@
       "factory": "./dist/generators/handler/handler",
       "schema": "./dist/generators/handler/schema.json",
       "description": "Generate a Go handler skeleton for none, Gin or Echo v5."
+    },
+    "service": {
+      "factory": "./dist/generators/service/service",
+      "schema": "./dist/generators/service/schema.json",
+      "description": "Generate a Go service skeleton with functional constructor options."
+    },
+    "repository": {
+      "factory": "./dist/generators/repository/repository",
+      "schema": "./dist/generators/repository/schema.json",
+      "description": "Generate a Go repository skeleton with functional constructor options."
+    },
+    "config": {
+      "factory": "./dist/generators/config/config",
+      "schema": "./dist/generators/config/schema.json",
+      "description": "Generate a Go config skeleton with functional loading options."
     }
   }
 }

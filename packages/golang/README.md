@@ -1,8 +1,8 @@
 # @hao-nx-toolkit/golang
 
-Create Go handler skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
+Create Go handler, service, repository, and config skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
 
-Choose a framework-free skeleton, Gin, or Echo v5. The target directory does not need to be an Nx project or contain a Go module.
+For Handler, choose a framework-free skeleton, Gin, or Echo v5. The target directory does not need to be an Nx project or contain a Go module.
 
 ## Compatibility
 
@@ -73,6 +73,89 @@ pnpm nx g @hao-nx-toolkit/golang:handler \
   --packageName=transport
 ```
 
+## Generate a service or repository
+
+```bash
+pnpm nx g @hao-nx-toolkit/golang:service \
+  --name=user-profile \
+  --directory=apps/api/internal/services
+
+pnpm nx g @hao-nx-toolkit/golang:repository \
+  --name=user-profile \
+  --directory=apps/api/internal/repositories
+```
+
+These commands create `services/user_profile_service.go` and `repositories/user_profile_repository.go` under `apps/api/internal`. Each generator writes one file and accepts required `name` and `directory` options plus optional `packageName`, using the same naming, path, package validation, and overwrite protections as Handler. They do not accept `framework`.
+
+The service skeleton is:
+
+```go
+package services
+
+type UserProfileService struct {
+}
+
+type UserProfileServiceOption func(*UserProfileService)
+
+func NewUserProfileService(options ...UserProfileServiceOption) *UserProfileService {
+	service := &UserProfileService{}
+	for _, option := range options {
+		option(service)
+	}
+	return service
+}
+```
+
+The repository skeleton uses `UserProfileRepository`, `UserProfileRepositoryOption`, and `NewUserProfileRepository` with the same constructor pattern. Constructors apply each option once in the supplied order to the returned pointer. Add fields, option functions, and application methods yourself; these generators do not create a `Register` method, framework imports, or application tests.
+
+Names become PascalCase types and snake_case filenames with the appropriate suffix. `UserService` and `user-service` both produce `UserService` in `user_service.go`; `UserRepository` and `user-repository` both produce `UserRepository` in `user_repository.go`. A suffix alone (`service` or `repository`) is rejected because a base name is required. Use `--packageName=storage` to override the output directory's package name when needed.
+
+## Generate config
+
+```bash
+pnpm nx g @hao-nx-toolkit/golang:config \
+  --directory=apps/api/internal/config
+```
+
+This creates `apps/api/internal/config/config.go`. `directory` is the only generator option and refers to the final directory; the generator does not add a `config` subdirectory. The filename is always `config.go` and the package is always `config`, even when the directory has a different name. `name` and `packageName` are not supported.
+
+```go
+package config
+
+type Config struct {
+	// TODO: Need to implement config fields
+}
+
+type loadOptions struct {
+	path string
+}
+
+type LoadOption func(*loadOptions)
+
+func WithPath(path string) LoadOption {
+	return func(options *loadOptions) {
+		options.path = path
+	}
+}
+
+func Load(options ...LoadOption) (*Config, error) {
+	var opts loadOptions
+	for _, option := range options {
+		option(&opts)
+	}
+
+	var result Config
+
+	// TODO: Need to implement loading and validation using opts
+
+	return &result, nil
+}
+```
+
+After implementing loading and validation, callers can supply a path with `config.Load(config.WithPath("config.yaml"))`. Options run once in order before the loading TODO; repeated `WithPath` calls keep the last path. Without `WithPath`, the private path starts as an empty string. The skeleton currently returns an empty `Config` and nil error, performs no I/O, and supplies no default path, file format, parser, or validation. Add those behaviors yourself using `opts.path`.
+
+The same workspace-relative path and existing-file safeguards apply. Existing Go files must use `package config` (or `config_test` in external test files); a different directory package causes an error before generation. Existing `config.go` files are never overwritten.
+
 ## Framework templates
 
 ### Gin
@@ -129,13 +212,13 @@ A trailing `Handler` word is recognized and is not appended again. A base name i
 
 The Go package name must be a valid identifier, cannot be a Go keyword or `_`, and must match existing Go files directly in the target directory. External test packages named `<packageName>_test` in `_test.go` files are accepted. Comments and build tags may precede the package clause; package validation checks files regardless of build tags, so directories with conditional alternative package names are rejected. Go files starting with `.` or `_` are ignored, following Go file selection conventions. Use `packageName` when the directory basename is invalid or differs from the existing package.
 
-An existing target file always causes an error, even if its content matches the skeleton. There is no overwrite option. Validation failures occur before the handler is written.
+An existing target file always causes an error, even if its content matches the skeleton. There is no overwrite option. Validation failures occur before a generated file is written.
 
 ## Scope and limitations
 
-- Generates only the Go handler file; does not modify `go.mod`, `go.sum`, Nx projects, or dependency declarations.
+- Generates only the requested Go skeleton file; does not modify `go.mod`, `go.sum`, Nx projects, or dependency declarations.
 - Does not run `go`, `gofmt`, or dependency installation. Templates are checked for `gofmt` formatting during plugin testing.
-- Leaves route registration for you to implement, with a TODO comment in every framework template.
+- Leaves route registration and config loading/validation for you to implement, with TODO comments in the relevant templates.
 - Does not create custom options, routers, endpoints, or application tests.
 - Checks the destination file and package clauses, but does not detect conflicting Go type declarations in other files.
 
@@ -150,4 +233,4 @@ pnpm nx e2e golang-e2e
 
 The E2E suite packs the plugin, installs it into a temporary Nx 23.2.0 consumer, and runs the real CLI. It checks the documented generation workflows, naming, package validation, refusal to overwrite, dry-run behavior, and preservation of dependency/configuration files.
 
-Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles all three templates, runs constructor option and registration tests, and checks generated files with `gofmt`. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. CI installs the same Go version in both pull request and main branch jobs.
+Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles the three Handler framework variants and the Service, Repository, and Config templates, runs constructor option and registration tests, and checks generated files with `gofmt`. Config generation checks cover the emitted option loop and path assignment; external Go consumer tests use only public `Load` and `WithPath` APIs to check successful calls with zero or repeated options and nonexistent file paths. The loading state remains private, and actual loading remains a TODO. Negative controls temporarily duplicate Service and Repository constructor option calls in fixture artifacts to prove the Go behavior checks detect regressions; original artifacts are restored before the final compilation. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. CI installs the same Go version in both pull request and main branch jobs.

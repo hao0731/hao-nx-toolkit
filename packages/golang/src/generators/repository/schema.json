@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "GolangRepository",
+  "title": "Generate a Go repository",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Repository base name, converted to PascalCase with a Repository suffix.",
+      "minLength": 1
+    },
+    "directory": {
+      "type": "string",
+      "description": "Target directory relative to the Nx workspace root.",
+      "minLength": 1
+    },
+    "packageName": {
+      "type": "string",
+      "description": "Go package name. Defaults to the target directory basename."
+    }
+  },
+  "required": ["name", "directory"],
+  "additionalProperties": false
+}
