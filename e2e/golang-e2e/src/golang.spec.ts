@@ -147,6 +147,44 @@ afterAll(() => {
   }
 });
 
+it('generates a model through the packed CLI with a callable value factory and gofmt-clean output', async () => {
+  write('models-go/go.mod', 'module example.com/models\n\ngo 1.26.2\n');
+  const result = await generate(
+    ['--name=user', '--directory=models-go/domain'],
+    consumer,
+    'model',
+  );
+  expect(result.code, result.text).toBe(0);
+  write(
+    'models-go/domain/user_test.go',
+    `package domain_test
+
+import (
+    "testing"
+    "example.com/models/domain"
+)
+
+func TestModelFactory(t *testing.T) {
+    var model domain.User = domain.NewUser()
+    if model != (domain.User{}) { t.Fatal("factory did not return the zero value") }
+}
+`,
+  );
+  const formatted = await command(
+    'gofmt',
+    ['-l', 'domain/user.go'],
+    join(consumer, 'models-go'),
+  );
+  expect(formatted.code, formatted.text).toBe(0);
+  expect(formatted.text).toBe('');
+  const compiled = await command(
+    'go',
+    ['test', './...'],
+    join(consumer, 'models-go'),
+  );
+  expect(compiled.code, compiled.text).toBe(0);
+}, 120_000);
+
 it('generates a default handler through the installed plugin and real Nx CLI', async () => {
   expect(
     JSON.parse(read('node_modules/@hao-nx-toolkit/golang/package.json'))
@@ -160,6 +198,41 @@ it('generates a default handler through the installed plugin and real Nx CLI', a
   expect(read('apps/api/handlers/user_profile_handler.go')).toContain(
     'type UserProfileHandler struct',
   );
+}, 60_000);
+
+it('generates request and response models with explicit factory choices through the packed CLI', async () => {
+  const protectedFiles = ['package.json', 'nx.json', 'pnpm-lock.yaml'];
+  const before = protectedFiles.map(read);
+  mkdirSync(join(consumer, 'nested'), { recursive: true });
+  for (const [name, file, type, factory] of [
+    ['user-request', 'user_request.go', 'UserRequest', false],
+    ['user-model', 'user_model.go', 'UserModel', true],
+    ['HTTPClient', 'http_client.go', 'HttpClient', false],
+  ] as const) {
+    const result = await generate(
+      [
+        `--name=${name}`,
+        '--directory=model-components',
+        '--packageName=transport',
+        `--factory=${factory}`,
+      ],
+      join(consumer, 'nested'),
+      'model',
+    );
+    expect(result.code, result.text).toBe(0);
+    const output = read(`model-components/${file}`);
+    expect(output).toContain(`package transport\n\ntype ${type} struct`);
+    if (factory) expect(output).toContain(`func New${type}() ${type}`);
+    else expect(output).not.toContain('func New');
+    const formatted = await command('gofmt', [
+      '-l',
+      `model-components/${file}`,
+    ]);
+    expect(formatted.code, formatted.text).toBe(0);
+    expect(formatted.text).toBe('');
+  }
+  expect(existsSync(join(consumer, 'nested/model-components'))).toBe(false);
+  expect(protectedFiles.map(read)).toEqual(before);
 }, 60_000);
 
 it('generates each framework without changing dependency files or Nx configuration', async () => {

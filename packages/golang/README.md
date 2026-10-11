@@ -1,6 +1,6 @@
 # @hao-nx-toolkit/golang
 
-Create Go handler, service, repository, and config skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
+Create Go model, handler, service, repository, and config skeletons in your Nx workspace. The `handler` generator creates a handler struct, a functional option type, a constructor that applies options in order, and a `Register` method ready for your route registration code.
 
 For Handler, choose a framework-free skeleton, Gin, or Echo v5. The target directory does not need to be an Nx project or contain a Go module.
 
@@ -19,6 +19,64 @@ pnpm add -D @hao-nx-toolkit/golang
 ```
 
 When installing at the root of a pnpm workspace, use `pnpm add -Dw @hao-nx-toolkit/golang`. No initialization generator or Nx plugin configuration is required.
+
+## Generate a model
+
+Use `model` to create a domain model, request, or response skeleton:
+
+```bash
+pnpm nx g @hao-nx-toolkit/golang:model \
+  --name=user \
+  --directory=apps/api/internal/models
+```
+
+This creates `apps/api/internal/models/user.go`:
+
+```go
+package models
+
+type User struct {
+	// TODO: Need to implement fields
+}
+
+func NewUser() User {
+	// Need to implement logic
+	var model User
+	return model
+}
+```
+
+| Option        | Value            | Meaning                                                                |
+| ------------- | ---------------- | ---------------------------------------------------------------------- |
+| `name`        | Required string  | Model name; converted to a PascalCase type and snake_case filename.    |
+| `directory`   | Required string  | Output directory relative to the workspace root, using `/` separators. |
+| `packageName` | Optional string  | Go package name; defaults to the directory basename.                   |
+| `factory`     | Optional boolean | Generate a zero-argument value factory; defaults to `true`.            |
+
+Missing directories are created. Paths remain relative to the workspace root when running from a subdirectory. Package names and existing files use the same validation and overwrite protections described below.
+
+For a request or response that does not need a factory:
+
+```bash
+pnpm nx g @hao-nx-toolkit/golang:model \
+  --name=user-request \
+  --directory=apps/api/internal/http-models \
+  --packageName=transport \
+  --factory=false
+```
+
+This creates `user_request.go` containing `package transport` and `type UserRequest struct` with the fields TODO, and omits the factory. The same defaults apply to the exported `modelGenerator` and `ModelGeneratorOptions` programmatic API.
+
+| Input          | Model type    | File              |
+| -------------- | ------------- | ----------------- |
+| `user`         | `User`        | `user.go`         |
+| `user-request` | `UserRequest` | `user_request.go` |
+| `user-model`   | `UserModel`   | `user_model.go`   |
+| `HTTPClient`   | `HttpClient`  | `http_client.go`  |
+
+Model uses the same word splitting and identifier rules as Handler, without appending or removing a `Model` suffix. Each generator independently produces its own skeleton; Handler, Service, and Repository do not generate models.
+
+Add fields, JSON tags, initialization, validation, and domain behavior yourself. The default factory returns the zero value by value, without arguments; it does not enforce domain invariants. There are no domain/request/response presets or automatic fields and tags.
 
 ## Generate a handler
 
@@ -233,4 +291,4 @@ pnpm nx e2e golang-e2e
 
 The E2E suite packs the plugin, installs it into a temporary Nx 23.2.0 consumer, and runs the real CLI. It checks the documented generation workflows, naming, package validation, refusal to overwrite, dry-run behavior, and preservation of dependency/configuration files.
 
-Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles the three Handler framework variants and the Service, Repository, and Config templates, runs constructor option and registration tests, and checks generated files with `gofmt`. Config generation checks cover the emitted option loop and path assignment; external Go consumer tests use only public `Load` and `WithPath` APIs to check successful calls with zero or repeated options and nonexistent file paths. The loading state remains private, and actual loading remains a TODO. Negative controls temporarily duplicate Service and Repository constructor option calls in fixture artifacts to prove the Go behavior checks detect regressions; original artifacts are restored before the final compilation. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. CI installs the same Go version in both pull request and main branch jobs.
+Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles the three Handler framework variants and the Model, Service, Repository, and Config templates, runs constructor option and registration tests, and checks generated files with `gofmt`. Config generation checks cover the emitted option loop and path assignment; external Go consumer tests use only public `Load` and `WithPath` APIs to check successful calls with zero or repeated options and nonexistent file paths. The loading state remains private, and actual loading remains a TODO. Negative controls temporarily duplicate Service and Repository constructor option calls in fixture artifacts to prove the Go behavior checks detect regressions; original artifacts are restored before the final compilation. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. CI installs the same Go version in both pull request and main branch jobs.

@@ -10,9 +10,9 @@ export interface GoSkeletonOptions {
 export function normalizeGoSkeleton(
   tree: Tree,
   options: GoSkeletonOptions,
-  kind: 'handler' | 'service' | 'repository',
+  kind: 'handler' | 'service' | 'repository' | 'model',
 ) {
-  const suffix = kind[0].toUpperCase() + kind.slice(1);
+  const suffix = kind === 'model' ? '' : kind[0].toUpperCase() + kind.slice(1);
   if (
     typeof options.name !== 'string' ||
     !/^[\p{L}\p{Nd}_ -]+$/u.test(options.name) ||
@@ -45,12 +45,14 @@ export function normalizeGoSkeleton(
     .split(/[\s_-]+/)
     .filter(Boolean)
     .map((word) => word.toLowerCase());
-  if (words.at(-1) === kind) words.pop();
+  if (kind !== 'model' && words.at(-1) === kind) words.pop();
   if (!words.length || !/^[\p{L}]/u.test(words[0]))
     throw new Error(
-      `name must start with a letter and contain a base name before ${suffix}.`,
+      kind === 'model'
+        ? 'name must start with a letter.'
+        : `name must start with a letter and contain a base name before ${suffix}.`,
     );
-  const fileName = words.join('_') + '_' + kind;
+  const fileName = words.join('_') + (kind === 'model' ? '' : '_' + kind);
   if (tree.exists(directory + '/' + fileName + '.go'))
     throw new Error(`Target ${kind} file already exists.`);
   assertGoPackage(tree, directory, packageName);

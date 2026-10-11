@@ -19,6 +19,11 @@
       "factory": "./dist/generators/config/config",
       "schema": "./dist/generators/config/schema.json",
       "description": "Generate a Go config skeleton with functional loading options."
+    },
+    "model": {
+      "factory": "./dist/generators/model/model",
+      "schema": "./dist/generators/model/schema.json",
+      "description": "Generate a Go model skeleton with an optional value factory."
     }
   }
 }
