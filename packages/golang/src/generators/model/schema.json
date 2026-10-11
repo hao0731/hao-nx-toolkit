@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "$id": "GolangModel",
+  "title": "Generate a Go model",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Model name, converted to PascalCase and snake_case without a suffix.",
+      "minLength": 1
+    },
+    "directory": {
+      "type": "string",
+      "description": "Target directory relative to the Nx workspace root.",
+      "minLength": 1
+    },
+    "packageName": {
+      "type": "string",
+      "description": "Go package name. Defaults to the target directory basename."
+    },
+    "factory": {
+      "type": "boolean",
+      "default": true,
+      "description": "Generate a zero-argument factory returning the model by value."
+    }
+  },
+  "required": ["name", "directory"],
+  "additionalProperties": false
+}

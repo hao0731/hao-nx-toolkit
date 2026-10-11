@@ -147,6 +147,44 @@ afterAll(() => {
   }
 });
 
+it('generates a model through the packed CLI with a callable value factory and gofmt-clean output', async () => {
+  write('models-go/go.mod', 'module example.com/models\n\ngo 1.26.2\n');
+  const result = await generate(
+    ['--name=user', '--directory=models-go/domain'],
+    consumer,
+    'model',
+  );
+  expect(result.code, result.text).toBe(0);
+  write(
+    'models-go/domain/user_test.go',
+    `package domain_test
+
+import (
+    "testing"
+    "example.com/models/domain"
+)
+
+func TestModelFactory(t *testing.T) {
+    var model domain.User = domain.NewUser()
+    if model != (domain.User{}) { t.Fatal("factory did not return the zero value") }
+}
+`,
+  );
+  const formatted = await command(
+    'gofmt',
+    ['-l', 'domain/user.go'],
+    join(consumer, 'models-go'),
+  );
+  expect(formatted.code, formatted.text).toBe(0);
+  expect(formatted.text).toBe('');
+  const compiled = await command(
+    'go',
+    ['test', './...'],
+    join(consumer, 'models-go'),
+  );
+  expect(compiled.code, compiled.text).toBe(0);
+}, 120_000);
+
 it('generates a default handler through the installed plugin and real Nx CLI', async () => {
   expect(
     JSON.parse(read('node_modules/@hao-nx-toolkit/golang/package.json'))
@@ -160,6 +198,224 @@ it('generates a default handler through the installed plugin and real Nx CLI', a
   expect(read('apps/api/handlers/user_profile_handler.go')).toContain(
     'type UserProfileHandler struct',
   );
+}, 60_000);
+
+it('generates request and response models with explicit factory choices through the packed CLI', async () => {
+  write(
+    'model-components/go.mod',
+    'module example.com/transport\n\ngo 1.26.2\n',
+  );
+  write('model-components/go.sum', '');
+  const protectedFiles = [
+    'model-components/go.mod',
+    'model-components/go.sum',
+    'package.json',
+    'nx.json',
+    'pnpm-lock.yaml',
+  ];
+  const before = protectedFiles.map(read);
+  mkdirSync(join(consumer, 'nested'), { recursive: true });
+  for (const [name, file, type, factory] of [
+    ['user-request', 'user_request.go', 'UserRequest', false],
+    ['user-model', 'user_model.go', 'UserModel', true],
+    ['HTTPClient', 'http_client.go', 'HttpClient', false],
+  ] as const) {
+    const result = await generate(
+      [
+        `--name=${name}`,
+        '--directory=model-components',
+        '--packageName=transport',
+        `--factory=${factory}`,
+      ],
+      join(consumer, 'nested'),
+      'model',
+    );
+    expect(result.code, result.text).toBe(0);
+    const output = read(`model-components/${file}`);
+    expect(output).toContain(`package transport\n\ntype ${type} struct`);
+    if (factory) expect(output).toContain(`func New${type}() ${type}`);
+    else expect(output).not.toContain('func New');
+    const formatted = await command('gofmt', [
+      '-l',
+      `model-components/${file}`,
+    ]);
+    expect(formatted.code, formatted.text).toBe(0);
+    expect(formatted.text).toBe('');
+  }
+  write(
+    'model-components/models_test.go',
+    `package transport_test
+
+import (
+    "testing"
+    transport "example.com/transport"
+)
+
+func TestPublicModelTypes(t *testing.T) {
+    var request transport.UserRequest
+    var response transport.HttpClient
+    var domain transport.UserModel = transport.NewUserModel()
+    if request != (transport.UserRequest{}) || response != (transport.HttpClient{}) || domain != (transport.UserModel{}) {
+        t.Fatal("model skeletons must be usable as zero values")
+    }
+}
+`,
+  );
+  const compiled = await command(
+    'go',
+    ['test', './...'],
+    join(consumer, 'model-components'),
+  );
+  expect(compiled.code, compiled.text).toBe(0);
+  expect(existsSync(join(consumer, 'nested/model-components'))).toBe(false);
+  expect(protectedFiles.map(read)).toEqual(before);
+}, 60_000);
+
+it('protects existing model files and validates package, path, name and CLI options', async () => {
+  write(
+    'model-safeguards/go.mod',
+    'module example.com/safeguards\n\ngo 1.26.2\n',
+  );
+  write('model-safeguards/go.sum', '');
+  write(
+    'model-safeguards/models/user.go',
+    'package models\n// user implementation\n',
+  );
+  write(
+    'model-safeguards/mismatch/existing.go',
+    '/* package mismatch */\npackage other\n',
+  );
+  const protectedFiles = [
+    'model-safeguards/go.mod',
+    'model-safeguards/go.sum',
+    'model-safeguards/models/user.go',
+    'model-safeguards/mismatch/existing.go',
+    'package.json',
+    'pnpm-lock.yaml',
+    'nx.json',
+  ];
+  const before = protectedFiles.map(read);
+  const overwrite = await generate(
+    ['--name=user', '--directory=model-safeguards/models'],
+    consumer,
+    'model',
+  );
+  expect(overwrite.code, overwrite.text).not.toBe(0);
+  expect(overwrite.text).toContain('already exists');
+  const conflict = await generate(
+    ['--name=user', '--directory=model-safeguards/mismatch'],
+    consumer,
+    'model',
+  );
+  expect(conflict.code, conflict.text).not.toBe(0);
+  expect(conflict.text).toContain('package');
+  expect(existsSync(join(consumer, 'model-safeguards/mismatch/user.go'))).toBe(
+    false,
+  );
+  const overridden = await generate(
+    [
+      '--name=user',
+      '--directory=model-safeguards/mismatch',
+      '--packageName=other',
+    ],
+    consumer,
+    'model',
+  );
+  expect(overridden.code, overridden.text).toBe(0);
+  expect(read('model-safeguards/mismatch/user.go')).toContain(
+    'package other\n',
+  );
+  for (const [args, message] of [
+    [
+      ['--name=123-user', '--directory=model-invalid', '--packageName=models'],
+      /name must start with a letter/,
+    ],
+    [
+      ['--name=İtem', '--directory=model-invalid', '--packageName=models'],
+      /normalized model name.*valid Go identifier/,
+    ],
+    [['--name=user', '--directory=../escape'], /directory/],
+    [['--name=user', '--directory=/absolute'], /directory/],
+    [['--name=user', '--directory=C:\\escape'], /directory/],
+    [['--name=user', '--directory=model-invalid'], /packageName/],
+    [
+      ['--name=user', '--directory=model-invalid', '--packageName=type'],
+      /packageName/,
+    ],
+    [
+      [
+        '--name=user',
+        '--directory=model-invalid',
+        '--packageName=models',
+        '--framework=gin',
+      ],
+      /schema|property|additional|not found/i,
+    ],
+    [
+      [
+        '--name=user',
+        '--directory=model-invalid',
+        '--packageName=models',
+        '--factory=invalid',
+      ],
+      /boolean|factory/i,
+    ],
+    [['--name=user'], /directory/],
+    [['--directory=model-invalid'], /name/],
+  ] as const) {
+    const invalid = await generate([...args], consumer, 'model');
+    expect(invalid.code, invalid.text).not.toBe(0);
+    expect(invalid.text).toMatch(message);
+  }
+  expect(existsSync(join(consumer, 'model-invalid'))).toBe(false);
+  const preview = await generate(
+    [
+      '--name=user-response',
+      '--directory=model-preview',
+      '--packageName=models',
+      '--factory=false',
+      '--dry-run',
+    ],
+    consumer,
+    'model',
+  );
+  expect(preview.code, preview.text).toBe(0);
+  expect(preview.text).toContain('model-preview/user_response.go');
+  expect(existsSync(join(consumer, 'model-preview'))).toBe(false);
+  expect(protectedFiles.map(read)).toEqual(before);
+}, 120_000);
+
+it('rejects special Go model filenames while allowing ordinary names at the underscore boundary', async () => {
+  for (const name of [
+    'UserTest',
+    'user-linux',
+    'user-amd64',
+    'user-linux-arm64',
+    'user-hurd',
+    'user-armbe',
+  ]) {
+    const result = await generate(
+      [`--name=${name}`, '--directory=model-reserved', '--packageName=models'],
+      consumer,
+      'model',
+    );
+    expect(result.code, result.text).not.toBe(0);
+    expect(result.text).toMatch(/special Go filename.*choose another name/);
+    expect(existsSync(join(consumer, 'model-reserved'))).toBe(false);
+  }
+  for (const [name, file] of [
+    ['linux', 'linux.go'],
+    ['test', 'test.go'],
+    ['user-unix', 'user_unix.go'],
+  ]) {
+    const result = await generate(
+      [`--name=${name}`, '--directory=model-ordinary', '--packageName=models'],
+      consumer,
+      'model',
+    );
+    expect(result.code, result.text).toBe(0);
+    expect(existsSync(join(consumer, `model-ordinary/${file}`))).toBe(true);
+  }
 }, 60_000);
 
 it('generates each framework without changing dependency files or Nx configuration', async () => {

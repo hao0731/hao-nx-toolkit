@@ -6,3 +6,5 @@ export { repositoryGenerator } from './generators/repository/repository';
 export type { RepositoryGeneratorOptions } from './generators/repository/repository';
 export { configGenerator } from './generators/config/config';
 export type { ConfigGeneratorOptions } from './generators/config/config';
+export { modelGenerator } from './generators/model/model';
+export type { ModelGeneratorOptions } from './generators/model/model';

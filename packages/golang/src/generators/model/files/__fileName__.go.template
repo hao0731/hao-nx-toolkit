@@ -1,0 +1,11 @@
+package <%= packageName %>
+
+type <%= typeName %> struct {
+	// TODO: Need to implement fields
+}<% if (factory) { %>
+
+func New<%= typeName %>() <%= typeName %> {
+	// Need to implement logic
+	var model <%= typeName %>
+	return model
+}<% } %>
