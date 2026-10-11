@@ -76,6 +76,8 @@ This creates `user_request.go` containing `package transport` and `type UserRequ
 
 Model uses the same word splitting and identifier rules as Handler, without appending or removing a `Model` suffix. Each generator independently produces its own skeleton; Handler, Service, and Repository do not generate models.
 
+Model rejects filenames ending in `_test.go` or a recognized Go OS/architecture suffix (such as `user_linux.go`, `user_amd64.go`, or `user_linux_arm64.go`) before writing files. Choose another name when this happens; the generator does not silently rename your file. CamelCase inputs such as `UserLinux` are checked after snake_case normalization. Single-word `linux.go` and `test.go`, and `user_unix.go`, are ordinary Go filenames and remain allowed. The recognized platform list follows Go 1.26.2's `internal/syslist` filename matching values, including historical targets; generation does not require a Go installation.
+
 Add fields, JSON tags, initialization, validation, and domain behavior yourself. The default factory returns the zero value by value, without arguments; it does not enforce domain invariants. There are no domain/request/response presets or automatic fields and tags.
 
 ## Generate a handler
