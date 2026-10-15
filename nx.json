@@ -52,9 +52,13 @@
     }
   ],
   "release": {
-    "projects": ["*", "!utils", "!@org/source"],
+    "projects": ["golang", "project-boundary"],
     "version": {
-      "preVersionCommand": "npx nx run-many -t build"
+      "preVersionCommand": "pnpm nx run-many -t build -p golang,project-boundary"
+    },
+    "projectsRelationship": "fixed",
+    "git": {
+      "push": false
     }
   },
   "targetDefaults": {

@@ -8,7 +8,7 @@ The plugin supports workspace-wide, per-project, and affected checks, plus optio
 
 ## Compatibility
 
-This version requires **Nx 23.2.0 exactly**. See the [toolkit version compatibility table](../../README.md#nx-version-compatibility) when choosing a version for your workspace.
+This version requires **Nx 23.2.0 exactly**. See the [toolkit version compatibility table](https://github.com/hao0731/hao-nx-toolkit#nx-version-compatibility) when choosing a version for your workspace.
 
 ## Install and initialize
 

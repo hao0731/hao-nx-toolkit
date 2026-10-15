@@ -6,7 +6,7 @@ For Handler, choose a framework-free skeleton, Gin, or Echo v5. The target direc
 
 ## Compatibility
 
-This version requires **Nx 23.2.0 exactly**. See the [toolkit version compatibility table](../../README.md#nx-version-compatibility) when choosing a version for your workspace.
+This version requires **Nx 23.2.0 exactly**. See the [toolkit version compatibility table](https://github.com/hao0731/hao-nx-toolkit#nx-version-compatibility) when choosing a version for your workspace.
 
 You do not need Go installed to run the generator. Install Go and the selected framework when you are ready to compile your application.
 

@@ -13,10 +13,19 @@ See each plugin's README for installation, configuration, and usage instructions
 
 ## Nx version compatibility
 
-Hao Nx Toolkit plugins share a single toolkit version. **Nx 23.2.0 is the minimum supported version**; the table below lists the supported Nx version for each toolkit version.
+Hao Nx Toolkit plugins share a single toolkit version. **Nx 23.2.0 exactly is supported**; the plugin peer dependencies require this exact version. Other Nx versions have not been verified. The table below lists compatibility and release status for each toolkit version.
 
-| Hao Nx Toolkit version | Supported Nx version |
-| ---------------------- | -------------------- |
-| `0.0.1`                | `23.2.0`             |
+| Hao Nx Toolkit version        | Supported Nx version |
+| ----------------------------- | -------------------- |
+| `0.0.1` (development)         | `23.2.0`             |
+| `0.1.0` (planned, unreleased) | `23.2.0`             |
 
 Choose the toolkit version that matches your workspace's Nx version. Support for newer Nx versions will be recorded in this table as it becomes available.
+
+## Releases
+
+See the [release guide](./docs/releasing.md) for validation, package inspection, and the manual release process. The [draft 0.1.0 release notes](./docs/releases/0.1.0.md) describe the planned first public release; package manifests remain at development version `0.0.1` until release preparation.
+
+## License
+
+[MIT](./LICENSE). Each published package includes its own copy of the license.
