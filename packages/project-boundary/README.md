@@ -24,13 +24,44 @@ When installing at the root of a pnpm workspace, use `pnpm add -Dw @hao-nx-toolk
 Initialization:
 
 - Creates `project-boundary.config.json` at the workspace root with a schema reference for editor support.
-- Adds a `check-boundaries` target to every existing project.
+- Registers `@hao-nx-toolkit/project-boundary` in root `nx.json.plugins` to infer each discovered project's `check-boundaries` target.
 - Adds a `check-boundaries-all` target to the root project and prints the command to run it.
-- Preserves existing boundary rules and unrelated targets, including inferred build and test targets.
+- Preserves existing boundary rules, authored targets, plugin options, and unrelated project settings.
 
-The generated file starts with `depConstraints: []`. **Configure your rules before running checks**: a project with outgoing project dependencies fails if no rule matches it.
+Initialization writes only root files. It does not add target declarations to individual projects or create `project.json` files for projects inferred by other plugins.
 
-Rerun the initializer after adding projects. It includes the new projects and retains your existing rules. If a boundary target already uses another executor or has a conflicting project selector, initialization fails before writing changes.
+The generated policy file starts with `depConstraints: []`. **Configure your rules before running checks**: a project with outgoing project dependencies fails if no rule matches it.
+
+### Project discovery and additional markers
+
+By default, the plugin discovers projects from `project.json` and package-manager workspace `package.json` files. Package discovery follows Nx's workspace membership and exclusion rules, including pnpm workspace patterns; arbitrary nested `package.json` files are not included. Newly added matching projects acquire `check-boundaries` automatically, without rerunning init.
+
+For projects that another Nx plugin discovers through other files, extend the root registration:
+
+```json
+{
+  "plugins": [
+    {
+      "plugin": "@hao-nx-toolkit/project-boundary",
+      "options": {
+        "projectMarkers": ["**/go.mod", "**/inferred.marker"]
+      }
+    }
+  ]
+}
+```
+
+Keep your other plugin registrations in the same array. Each marker's containing directory is the project root; choose markers that align with the roots supplied by the language or framework plugin. `projectMarkers` is an optional array of nonempty workspace-relative glob strings. Absolute paths, parent traversal segments, and negated globs are not supported. Extra markers extend the defaults.
+
+The inference callback uses the root `nx.json` as its entry point and discovers matching files across the workspace. If you configure Nx's plugin `include` or `exclude` filters, they must allow `nx.json`; those filters do not select individual project roots for this plugin.
+
+### Coverage and Nx overrides
+
+Init and `check-boundaries-all` compare the complete Nx project graph against the configured discovery rules. An uncovered project fails init before any writes, or fails the full check with a configuration error naming the project and the marker setting to update. Ordinary graph queries, builds, covered project checks, and native affected commands remain available. An affected run can skip an uncovered project because it has no inferred target; run the full workspace check in CI to guarantee coverage.
+
+The inferred targets follow normal Nx precedence: `targetDefaults` and project configuration can override inferred settings, including a same-name target from another plugin. Init preserves authored targets and does not reject different executors or project selectors. Coverage checks discovery, not executor identity. Custom overrides control the resulting execution scope, inputs, caching, and report behavior.
+
+This is a **breaking change** from persisted per-project targets. No migration or legacy cleanup is provided. Existing target declarations remain in place and may override the inferred defaults; remove obsolete declarations manually when adopting inference.
 
 ## Configure boundary rules
 
@@ -156,9 +187,16 @@ Replace `main` with your comparison branch or commit. For current uncommitted ch
 pnpm nx affected -t check-boundaries --uncommitted --output-style=static
 ```
 
-Nx also selects reverse dependents, so changing a dependency target's tags rechecks projects that depend on it. Changes to the shared configuration select all initialized projects. Checks run without task caching and read the current workspace; staged-only snapshot validation is not supported.
+Nx also selects reverse dependents, so changing a dependency target's tags rechecks projects that depend on it. The inferred targets include the shared policy as a workspace input, so policy changes select all covered projects. Caching defaults to disabled. Checks read the complete current graph, including unchanged dependency targets and their tags; staged-only snapshot validation is not supported. Nx overrides can change these defaults.
 
-Checks return a nonzero exit code for boundary violations, invalid configuration, unknown project names, graph failures, or report-writing failures. You can use the command's exit code to fail CI.
+Include a full check alongside affected checks so newly uncovered projects fail CI:
+
+```bash
+pnpm nx run <root-project>:check-boundaries-all --output-style=static
+pnpm nx affected -t check-boundaries --base=main --head=HEAD --output-style=static
+```
+
+Checks return a nonzero exit code for boundary violations, invalid configuration, unknown project names, graph failures, or report-writing failures. The full check also fails for uncovered projects. Use the command's exit code to fail CI.
 
 For inline task diagnostics, add `--output-style=static` to the Nx command. Nx 23.3.0 can otherwise summarize failed task output with a log-file reference in noninteractive runs. Put the flag before the `--` separator when forwarding executor options, for example `pnpm nx run store-app:check-boundaries --output-style=static -- --outputFile=reports/store-app.json`.
 
@@ -215,7 +253,7 @@ You can select a source project through the workspace target:
 pnpm nx run <root-project>:check-boundaries-all -- --project=store-app --outputFile=reports/store-app.json
 ```
 
-The `--` separator before `--project` is required so Nx forwards the option to the plugin. Per-project `check-boundaries` targets already select their own source project.
+The `--` separator before `--project` is required so Nx forwards the option to the plugin. Inferred `check-boundaries` targets select their own source project by default. The root `check-boundaries-all` target checks the workspace unless an explicit selector changes its scope; it still validates coverage across the complete graph.
 
 ## Check scope and limitations
 
@@ -233,6 +271,6 @@ pnpm nx run-many -p project-boundary -t lint test build typecheck
 TOOLKIT_E2E_NX_VERSION=23.3.0 pnpm nx e2e project-boundary-e2e
 ```
 
-`TOOLKIT_E2E_NX_VERSION` defaults to `23.2.0` and accepts an exact stable version in `^23.2.0`. CI runs installed-package tests against `23.2.0`, `23.2.1`, and `23.3.0` on every pull request and main-branch push. Strict peer installation and runtime assertions verify the selected Nx at the consumer root, plugin, devkit dependency, and CLI. Tests exercise initialization, transactional conflict rejection, defaults and spreads, inferred projects, native affected checks, and reports.
+`TOOLKIT_E2E_NX_VERSION` defaults to `23.2.0` and accepts an exact stable version in `^23.2.0`. CI runs installed-package tests against `23.2.0`, `23.2.1`, and `23.3.0` on every pull request and main-branch push. Strict peer installation and runtime assertions verify the selected Nx at the consumer root, plugin, devkit dependency, and CLI. Tests exercise root-only initialization, transactional coverage failures, workspace package membership and exclusions, newly discovered projects, custom markers, Nx defaults and explicit target overrides, native affected checks, isolated plugin workers, and reports.
 
-The initializer isolates target-default synthesis and merging behind the exported **`@nx/devkit/internal`** entry point; it no longer imports deep `nx/src/...` implementation paths. This entry point remains internal and carries no public API compatibility guarantee. The plugin pins `@nx/devkit` to the 23.2.0 baseline, and the installed-package matrix guards the currently verified consumer versions. Add future Nx 23.x versions to the matrix and pass these checks before calling them verified.
+Discovery reuses Nx's package-manager workspace matching, workspace file search, and plugin registration filtering through the exported **`@nx/devkit/internal`** entry point. Target defaults and merging are handled by Nx itself. The internal discovery helpers carry no public API compatibility guarantee. The plugin pins `@nx/devkit` to the 23.2.0 baseline, and the installed-package matrix guards the currently verified consumer versions. Add future Nx 23.x versions to the matrix and pass these checks before calling them verified.
