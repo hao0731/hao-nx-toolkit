@@ -122,6 +122,14 @@ const runExecutor: PromiseExecutor<CheckExecutorSchema> = async (
   options,
   context,
 ) => {
+  options = {
+    ...options,
+    project:
+      options.project ??
+      (context.targetName === 'check-boundaries'
+        ? context.projectName
+        : undefined),
+  };
   const report: Report = {
     version: 1,
     scope:
