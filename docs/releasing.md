@@ -1,10 +1,14 @@
 # Releasing Hao Nx Toolkit
 
-## 0.2.0 release preparation
+## 0.2.0 release
 
-Version `0.2.0` is prepared from merged PR #8 in a clean release worktree. Both packages advance together. See the [0.2.0 release notes](./releases/0.2.0.md). Publication and verification are pending.
+Version `0.2.0` was published to npm on **2026-10-18 (Asia/Taipei)** for both packages, with `latest` set to `0.2.0`. See the [release notes](./releases/0.2.0.md), including the Nx baseline dependency-audit limitation.
 
-The release is previewed with `pnpm nx release 0.2.0 --skip-publish --dry-run`. Version and changelog preparation use the separate Nx commands with automatic commit, tag, push, and staging disabled, so the complete release metadata can be reviewed together. After validation, publish the inspected package tarballs, verify registry integrity and a clean consumer, then publish the annotated tag and GitHub Release with both tarballs and `SHA256SUMS`.
+The release was previewed with `pnpm nx release 0.2.0 --skip-publish --dry-run`. Separate Nx version and changelog commands prepared the fixed release group without automatic commits, tags, pushes, or staging. Both packed-package suites passed on Nx 23.2.0, 23.2.1, and 23.3.0, alongside unit, build, lint, typecheck, formatting, and package inventory checks.
+
+The exact audited tarballs from preparation commit [`7953cd3`](https://github.com/hao0731/hao-nx-toolkit/commit/7953cd311481556a6185c623c8318ff25a209d49) were published after npm browser verification. Both public registry downloads match byte for byte and by SHA-512 integrity. A strict-peer public-registry smoke consumer passed on Nx 23.2.0, including Go model generation/compilation and workspace/project boundary reports. The [GitHub Release](https://github.com/hao0731/hao-nx-toolkit/releases/tag/v0.2.0) provides both tarballs and `SHA256SUMS`; only release-status documentation changes after the artifact build commit.
+
+Do not repeat version preparation or publication for `0.2.0`. For a future release, use a new shared version, preview it first, validate and inspect the prepared artifacts, and publish those exact files. The older commands below are historical records.
 
 ## Historical 0.1.0 record
 
