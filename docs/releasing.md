@@ -2,7 +2,7 @@
 
 This guide prepares the first public `0.1.0` release of `@hao-nx-toolkit/golang` and `@hao-nx-toolkit/project-boundary`. They share a fixed toolkit version. Only these two projects are configured in Nx Release; the private repository root and E2E projects are excluded.
 
-Release preparation in this change leaves both manifests at development version `0.0.1`. The [0.1.0 notes](./releases/0.1.0.md) are a draft. Validation and dry runs do not publish to npm. The commands in **Prepare the local release** and **Publish later** are separate operator actions to perform when the release is approved.
+Current state: the local `0.1.0` release is prepared and both plugin manifests are `0.1.0`; the packages remain unpublished. See the [prepared release notes](./releases/0.1.0.md). Validation and dry runs do not publish to npm. The preparation recipe below describes the earlier transition from development version `0.0.1`; an already prepared checkout should run checks and package inspection, then proceed only to a separately approved publication.
 
 ## Prerequisites
 
@@ -13,6 +13,8 @@ Release preparation in this change leaves both manifests at development version 
 - For interactive publication, have an npm account with 2FA configured and its browser/security-key or one-time-password verification available. Use the current npm CLI with the Node installation. Authenticate only when ready to publish; do not store tokens in repository files. See [npm scoped public package publishing](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/) and [npm 2FA](https://docs.npmjs.com/using-two-factor-authentication).
 
 ## Validate without publishing
+
+The commands below describe validation before version preparation, starting from `0.0.1`. On the current prepared `0.1.0` checkout, run the checks and package inspection but skip the `nx release 0.1.0` dry run and the local preparation step; do not version again.
 
 From the repository root on the reviewed preparation branch, compare formatting against the release base, following the pull-request CI check. The example uses `origin/main`; ensure that remote-tracking reference is available and current. If the preparation changes are already merged into main, use the commit before those changes as `--base` instead, so the intended release changes remain in the comparison.
 
@@ -41,7 +43,7 @@ The publish roots are **`packages/golang` and `packages/project-boundary`**, eac
 
 ## Prepare the local release
 
-Run this only when the dry run and checks have passed and release preparation is approved:
+This transition from `0.0.1` has already been completed in the current checkout. Do not rerun it on an already prepared release. For a future fresh preparation, run this only when the dry run and checks have passed and release preparation is approved:
 
 ```bash
 pnpm nx release 0.1.0 --first-release --skip-publish
@@ -49,7 +51,7 @@ pnpm nx release 0.1.0 --first-release --skip-publish
 
 This changes both manifests to `0.1.0`, updates the lockfile as needed, generates the root `CHANGELOG.md`, and creates a local release commit and `v0.1.0` tag. Nx Release is configured with `git.push: false`, so this step does not push. `--skip-publish` is essential: it skips npm publication. Do not run this non-dry-run step merely to validate the preparation PR.
 
-Review the generated changelog against the draft notes, the release commit, the tag, and any lockfile changes. Check the package versions and rerun package inventory inspection and the full checks on the prepared release. If corrections are needed, finalize the corrected release commit and ensure the local tag points to that exact commit before publication. Mark the draft notes and compatibility entry as released only after successful publication.
+Review the generated changelog against the release notes, the release commit, the tag, and any lockfile changes. Check the package versions and rerun package inventory inspection and the full checks on the prepared release. If corrections are needed, finalize the corrected release commit and ensure the local tag points to that exact commit before publication. Mark the release notes and compatibility entry as released only after successful publication.
 
 Keep the prepared release checkout and build artifacts available until both packages have been published and verified. Running version preparation again is unnecessary after this point.
 
@@ -73,7 +75,7 @@ npm view @hao-nx-toolkit/golang@0.1.0 version dist.integrity --registry=https://
 npm view @hao-nx-toolkit/project-boundary@0.1.0 version dist.integrity --registry=https://registry.npmjs.org/
 ```
 
-After both publications and consumer checks succeed, push the reviewed release commit through the repository's normal branch/PR process and push the specific `v0.1.0` tag to the release remote. For a direct release from the approved branch with remote `origin`, the commands are `git push origin HEAD` and `git push origin v0.1.0`; adapt the branch workflow to repository protection rules. Create a GitHub Release for that tag using the reviewed changelog and draft notes. Record the completed publication in the README compatibility table and release notes through the normal review process.
+After both publications and consumer checks succeed, push the reviewed release commit through the repository's normal branch/PR process and push the specific `v0.1.0` tag to the release remote. For a direct release from the approved branch with remote `origin`, the commands are `git push origin HEAD` and `git push origin v0.1.0`; adapt the branch workflow to repository protection rules. Create a GitHub Release for that tag using the reviewed changelog and release notes. Record the completed publication in the README compatibility table and release notes through the normal review process.
 
 ## Registry consumer smoke test
 
