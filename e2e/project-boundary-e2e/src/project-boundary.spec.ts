@@ -1022,3 +1022,45 @@ it('reports missing inference registration during a full workspace check', async
   expect(full.code, full.text).toBe(1);
   expect(full.text).toContain('not covered');
 }, 60_000);
+
+it('initializes a runnable root target when its package name belongs to a child project', async () => {
+  const rootPackage = read('package.json');
+  rootPackage.name = 'app';
+  delete rootPackage.nx;
+  json('package.json', rootPackage);
+  const childBefore = readFileSync(
+    join(consumer, 'apps/app/project.json'),
+    'utf8',
+  );
+  const init = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(init.code, init.text).toBe(0);
+  const rootName = read('package.json').nx.name;
+  expect(rootName).not.toBe('app');
+  expect(read('package.json').name).toBe('app');
+  const shown = await pnpm(['nx', 'show', 'project', rootName, '--json']);
+  expect(shown.code, shown.text).toBe(0);
+  expect(parsedJson(shown.text).root).toBe('.');
+  const full = await pnpm([
+    'nx',
+    'run',
+    `${rootName}:check-boundaries-all`,
+    '--output-style=static',
+  ]);
+  expect(full.code, full.text).toBe(0);
+  const repeated = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(repeated.code, repeated.text).toBe(0);
+  expect(read('package.json').nx.name).toBe(rootName);
+  expect(readFileSync(join(consumer, 'apps/app/project.json'), 'utf8')).toBe(
+    childBefore,
+  );
+}, 60_000);

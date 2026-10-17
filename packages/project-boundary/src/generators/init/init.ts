@@ -61,15 +61,19 @@ export async function initGenerator(
   const rootFile = tree.exists('project.json')
     ? 'project.json'
     : 'package.json';
+  const existingRoot = [...projects.entries()].find(
+    ([, project]) => project.root === '.' || project.root === '',
+  );
   let rootName = 'workspace';
   updateJson(tree, rootFile, (json) => {
     const config = rootFile === 'project.json' ? json : (json.nx ??= {});
-    rootName = config.name ?? json.name ?? 'workspace';
-    if (!config.name && !json.name) {
+    rootName = existingRoot?.[0] ?? config.name ?? json.name ?? 'workspace';
+    if (!existingRoot) {
       let suffix = 0;
       while (projects.has(rootName)) rootName = `workspace-${++suffix}`;
-      config.name = rootName;
     }
+    if (rootName !== json.name && config.name !== rootName)
+      config.name = rootName;
     config.targets ??= {};
     config.targets['check-boundaries-all'] ??= {
       executor: `${plugin}:check`,

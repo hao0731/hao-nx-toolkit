@@ -1,6 +1,7 @@
 import { createTreeWithEmptyWorkspace } from '@nx/devkit/testing';
 import {
   addProjectConfiguration,
+  getProjects,
   readJson,
   writeJson,
   type Tree,
@@ -108,4 +109,40 @@ it('reports uncovered projects before writes when Nx registration filters disabl
   const before = tree.listChanges();
   await expect(initGenerator(tree)).rejects.toThrow('app (apps/app)');
   expect(tree.listChanges()).toEqual(before);
+});
+
+it('creates a distinct root project identity when the package name belongs to a child project', async () => {
+  writeJson(tree, 'package.json', { name: 'app', private: true });
+  addProjectConfiguration(tree, 'app', { root: 'apps/app' });
+  const childBefore = tree.read('apps/app/project.json')?.toString();
+  await initGenerator(tree);
+  const projects = getProjects(tree);
+  const root = [...projects.entries()].find(
+    ([, project]) => project.root === '.',
+  );
+  expect(root).toBeDefined();
+  expect(root?.[0]).not.toBe('app');
+  expect(root?.[1].targets?.['check-boundaries-all']?.executor).toBe(
+    '@hao-nx-toolkit/project-boundary:check',
+  );
+  expect(projects.get('app')?.root).toBe('apps/app');
+  expect(readJson(tree, 'package.json').name).toBe('app');
+  expect(tree.read('apps/app/project.json')?.toString()).toBe(childBefore);
+});
+
+it('preserves an existing root project identity when its package name matches a child', async () => {
+  writeJson(tree, 'package.json', {
+    name: 'app',
+    private: true,
+    nx: { name: 'existing-root' },
+  });
+  addProjectConfiguration(tree, 'app', { root: 'apps/app' });
+  await initGenerator(tree);
+  await initGenerator(tree);
+  expect(readJson(tree, 'package.json')).toMatchObject({
+    name: 'app',
+    nx: { name: 'existing-root' },
+  });
+  expect(getProjects(tree).get('existing-root')?.root).toBe('.');
+  expect(getProjects(tree).get('app')?.root).toBe('apps/app');
 });
