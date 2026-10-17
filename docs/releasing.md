@@ -4,7 +4,7 @@ The first public release, `0.1.0`, was published to npm on **2026-10-17 (Asia/Ta
 
 **Do not rerun version preparation or publication for `0.1.0`.** The first-release commands below are a historical recipe. Both packages are fully published; a later release must use a new version. Only these two projects belong to Nx's fixed release group; the private repository root and E2E projects are excluded.
 
-The published artifacts were built from commit [`615a781`](https://github.com/hao0731/hao-nx-toolkit/commit/615a781bbae0092367822fd48108f03d63f93876). Registry downloads match the audited tarballs byte for byte. The local annotated `v0.1.0` tag stays on that commit; documentation updates do not move it. Pushing the release tag and creating a GitHub Release require separate authorization and are not automatic consequences of a documentation PR.
+The published artifacts were built from commit [`615a781`](https://github.com/hao0731/hao-nx-toolkit/commit/615a781bbae0092367822fd48108f03d63f93876). Registry downloads match the audited tarballs byte for byte. The annotated `v0.1.0` tag has been pushed and identifies main commit [`ac01c48`](https://github.com/hao0731/hao-nx-toolkit/commit/ac01c487981463d0a94aaf1c0da69a2441697019), which differs from the artifact build commit only in publication-status documentation. The public [GitHub Release](https://github.com/hao0731/hao-nx-toolkit/releases/tag/v0.1.0) is complete; its assets are the two verified package tarballs and `SHA256SUMS`.
 
 ## Historical first-release prerequisites
 
@@ -59,7 +59,7 @@ Keep the prepared release checkout and build artifacts available until both pack
 
 ## Completed publication from verified tarballs
 
-For `0.1.0`, publication used the already built and audited `.tgz` files from release commit `615a781`, rather than rebuilding or repacking from a later checkout. Each artifact was submitted with `npm publish <verified-tarball.tgz> --access public --registry=https://registry.npmjs.org/`, using its exact audited file:
+For `0.1.0`, publication used the already built and audited `.tgz` files from artifact build commit `615a781`, rather than rebuilding or repacking from a later checkout. Each artifact was submitted with `npm publish <verified-tarball.tgz> --access public --registry=https://registry.npmjs.org/`, using its exact audited file:
 
 - `hao-nx-toolkit-golang-0.1.0.tgz`
 - `hao-nx-toolkit-project-boundary-0.1.0.tgz`
@@ -77,7 +77,9 @@ Before publication, 199 unit tests and 78 packed-artifact E2E checks passed acro
 
 ## Release tag and GitHub Release
 
-Keep the local annotated `v0.1.0` tag on `615a781`, the commit that produced the published artifacts. Do not move it onto a later publication-status documentation commit. Pushing this tag and creating a GitHub Release are separate future actions requiring authorization; do not perform them automatically after opening or merging the documentation PR. A later GitHub Release can use the reviewed changelog and release notes.
+The annotated `v0.1.0` tag was pushed on 2026-10-17 and points to main commit [`ac01c48`](https://github.com/hao0731/hao-nx-toolkit/commit/ac01c487981463d0a94aaf1c0da69a2441697019), after the publication-status PR was squash-merged. The public, non-prerelease [GitHub Release](https://github.com/hao0731/hao-nx-toolkit/releases/tag/v0.1.0) was published the same day (Asia/Taipei). Its two `.tgz` assets and `SHA256SUMS` were verified byte-identical to the audited artifacts from build commit `615a781`. Only documentation changed between that build commit and the tag target; npm packages were not republished.
+
+[Main CI](https://github.com/hao0731/hao-nx-toolkit/actions/runs/39019741738) passed for the tagged commit, including the Nx 23.2.0, 23.2.1, and 23.3.0 compatibility jobs. Tag publication and GitHub Release creation are complete; no further push, tag movement, or release creation is required for `0.1.0`.
 
 ## Registry consumer smoke test
 
