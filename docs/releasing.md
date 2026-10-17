@@ -8,7 +8,7 @@ Release preparation in this change leaves both manifests at development version 
 
 - Use a clean checkout containing all reviewed release preparation changes. Commit those changes before preparing the local release. Confirm the branch and `git status --short`, and check that the intended `v0.1.0` tag does not already exist locally or on the release remote.
 - Match CI: Node.js 24, pnpm 11.20.0, and Go 1.26.2. The workspace pins Nx 23.2.0; use `pnpm nx`, not a global Nx installation.
-- Allow access to the npm registry and Go module proxy. E2E tests install packed packages into isolated Nx 23.2.0 consumers and compile generated Go with Gin v1.12.0 and Echo v5.0.0. Go is needed for these tests, although running the Go generators alone does not require it.
+- Allow access to the npm registry and Go module proxy. E2E tests install packed packages into isolated consumers with Nx 23.2.0, 23.2.1, and 23.3.0 and compile generated Go with Gin v1.12.0 and Echo v5.0.0. Go is needed for these tests, although running the Go generators alone does not require it.
 - Own or have publishing permission for the npm `@hao-nx-toolkit` scope and both package names. A GitHub repository name does not grant npm scope access. Confirm that neither `0.1.0` package version is already published before starting a new release.
 - For interactive publication, have an npm account with 2FA configured and its browser/security-key or one-time-password verification available. Use the current npm CLI with the Node installation. Authenticate only when ready to publish; do not store tokens in repository files. See [npm scoped public package publishing](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/) and [npm 2FA](https://docs.npmjs.com/using-two-factor-authentication).
 
@@ -19,11 +19,19 @@ From the repository root on the reviewed preparation branch, compare formatting 
 ```bash
 pnpm install --frozen-lockfile
 pnpm nx format:check --base=origin/main --head=HEAD
-pnpm nx run-many -t lint test build typecheck e2e
+pnpm nx run-many -t lint build typecheck
+pnpm nx run-many -t test --exclude='*-e2e'
+for toolkit_nx_version in 23.2.0 23.2.1 23.3.0; do
+  TOOLKIT_E2E_NX_VERSION="$toolkit_nx_version" pnpm nx run-many -t e2e -p golang-e2e,project-boundary-e2e || exit $?
+done
 pnpm nx release 0.1.0 --first-release --skip-publish --dry-run
 npm pack ./packages/golang --dry-run --json
 npm pack ./packages/project-boundary --dry-run --json
 ```
+
+The checks match CI's split between static checks, unit suites, and installed-package E2E. CI runs all three consumer versions for both plugins on every pull request and main-branch push, independently of affected-project selection. `TOOLKIT_E2E_NX_VERSION` defaults to `23.2.0`; explicit values must be exact stable versions in `^23.2.0` (`>=23.2.0 <24.0.0`), with invalid values, ranges, and prereleases rejected. The test logs identify the selected version. Strict peer installs and runtime assertions check the actual Nx used by the consumer root, plugin, devkit dependency, and CLI, preventing a nested baseline Nx from masking a compatibility failure. Keep development and build dependencies, including `@nx/devkit`, pinned to the 23.2.0 baseline.
+
+The declared peer range permits other stable Nx 23.x releases; only `23.2.0`, `23.2.1`, and `23.3.0` are currently verified. Add another exact version to CI and pass both suites before listing it as verified. The boundary initializer uses an isolated `@nx/devkit/internal` integration instead of deep Nx source imports. This remains an internal API dependency, so the range is not a guarantee that future internal APIs will remain unchanged.
 
 The first-release dry run must select only `golang` and `project-boundary`, show both changing from `0.0.1` to `0.1.0`, and preview a workspace changelog, release commit, and `v0.1.0` tag. Inspect the output and exit code. Dry runs can build local artifacts and update caches, but must leave package versions and tracked source files unchanged and create no release tag. In restricted environments, set `NX_DAEMON=false NX_ISOLATE_PLUGINS=false` before the Nx commands if plugin workers cannot start.
 
@@ -88,7 +96,9 @@ npx nx g @hao-nx-toolkit/project-boundary:init
 npx nx show projects
 ```
 
-The explicit `nx.json` establishes the disposable directory as an Nx workspace before either generator runs. Inspect `internal/models/user.go`. Initialization prints the root workspace boundary command; run that command and confirm it succeeds. The initial empty ruleset permits a workspace without project-to-project dependencies. For a consumer with dependencies, configure the rules described in the [boundary README](../packages/project-boundary/README.md) before checking. Delete the disposable workspace after verification.
+The explicit `nx.json` establishes the disposable directory as an Nx workspace before either generator runs. Inspect `internal/models/user.go`. Initialization prints the root workspace boundary command; run that command with `--output-style=static` and confirm it succeeds. The initial empty ruleset permits a workspace without project-to-project dependencies. For a consumer with dependencies, configure the rules described in the [boundary README](../packages/project-boundary/README.md) before checking. Delete the disposable workspace after verification.
+
+For inline boundary task diagnostics, pass `--output-style=static` before the executor's `--` separator, for example `npx nx run hao-nx-toolkit-0.1.0-smoke:check-boundaries-all --output-style=static -- --outputFile=reports/boundaries.json` (use the root name printed by initialization). Nx 23.3.0 can otherwise summarize noninteractive failures with a log-file reference. The exit status and JSON report retain their meaning in either output mode.
 
 ## Recover a partial publication
 

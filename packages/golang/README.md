@@ -6,7 +6,7 @@ For Handler, choose a framework-free skeleton, Gin, or Echo v5. The target direc
 
 ## Compatibility
 
-This version requires **Nx 23.2.0 exactly**. See the [toolkit version compatibility table](https://github.com/hao0731/hao-nx-toolkit#nx-version-compatibility) when choosing a version for your workspace.
+This version accepts **Nx `^23.2.0`** (stable versions `>=23.2.0 <24.0.0`; prereleases excluded). Installed-package E2E tests verify **23.2.0, 23.2.1, and 23.3.0**. Other versions in the range have not yet been verified. See the [toolkit version compatibility table](https://github.com/hao0731/hao-nx-toolkit#nx-version-compatibility) when choosing a version for your workspace.
 
 You do not need Go installed to run the generator. Install Go and the selected framework when you are ready to compile your application.
 
@@ -288,9 +288,9 @@ From this repository's root, run:
 
 ```bash
 pnpm nx run-many -p golang -t lint test build typecheck
-pnpm nx e2e golang-e2e
+TOOLKIT_E2E_NX_VERSION=23.3.0 pnpm nx e2e golang-e2e
 ```
 
-The E2E suite packs the plugin, installs it into a temporary Nx 23.2.0 consumer, and runs the real CLI. It checks the documented generation workflows, naming, package validation, refusal to overwrite, dry-run behavior, and preservation of dependency/configuration files.
+The E2E suite packs the plugin, installs it into a temporary consumer with strict peer checks, and runs the real CLI. `TOOLKIT_E2E_NX_VERSION` defaults to `23.2.0` and accepts an exact stable Nx version in `^23.2.0`. CI runs `23.2.0`, `23.2.1`, and `23.3.0`; each run asserts that the consumer root, installed plugin, its devkit dependency, and CLI actually use the selected Nx version rather than a nested baseline installation. It checks the documented generation workflows, naming, package validation, refusal to overwrite, dry-run behavior, and preservation of dependency/configuration files.
 
-Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles the three Handler framework variants and the Model, Service, Repository, and Config templates, runs constructor option and registration tests, and checks generated files with `gofmt`. Config generation checks cover the emitted option loop and path assignment; external Go consumer tests use only public `Load` and `WithPath` APIs to check successful calls with zero or repeated options and nonexistent file paths. The loading state remains private, and actual loading remains a TODO. Negative controls temporarily duplicate Service and Repository constructor option calls in fixture artifacts to prove the Go behavior checks detect regressions; original artifacts are restored before the final compilation. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. CI installs the same Go version in both pull request and main branch jobs.
+Go validation uses **Go 1.26.2**, **Gin v1.12.0**, and **Echo v5.0.0** (both pinned framework versions require Go 1.25 or later). It compiles the three Handler framework variants and the Model, Service, Repository, and Config templates, runs constructor option and registration tests, and checks generated files with `gofmt`. Config generation checks cover the emitted option loop and path assignment; external Go consumer tests use only public `Load` and `WithPath` APIs to check successful calls with zero or repeated options and nonexistent file paths. The loading state remains private, and actual loading remains a TODO. Negative controls temporarily duplicate Service and Repository constructor option calls in fixture artifacts to prove the Go behavior checks detect regressions; original artifacts are restored before the final compilation. The suite uses temporary pnpm and Go caches and cleans them up. Install the Go toolchain and allow network access to the npm registry and Go module proxy before running E2E tests; missing prerequisites cause failures rather than skipped checks. The CI compatibility matrix installs this Go version on pull requests and main-branch pushes.
