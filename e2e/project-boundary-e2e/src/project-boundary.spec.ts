@@ -933,7 +933,12 @@ it('honors Nx defaults and explicit same-name target overrides without coverage 
   expect(read('reports/default.json')).toMatchObject({
     scope: { kind: 'project', project: 'lib' },
   });
-  const overridden = await pnpm(['nx', 'run', 'lib:check-boundaries']);
+  const overridden = await pnpm([
+    'nx',
+    'run',
+    'lib:check-boundaries',
+    '--output-style=static',
+  ]);
   expect(overridden.code, overridden.text).toBe(0);
   expect(overridden.text).toContain('explicit-boundary-override');
   const all = await pnpm([
@@ -945,7 +950,10 @@ it('honors Nx defaults and explicit same-name target overrides without coverage 
 }, 120_000);
 
 it('infers targets through isolated plugin workers and respects Nx registration filters', async () => {
+  const previousIsolation = environment.NX_ISOLATE_PLUGINS;
+  const previousGraphCache = environment.NX_CACHE_PROJECT_GRAPH;
   environment.NX_ISOLATE_PLUGINS = 'true';
+  environment.NX_CACHE_PROJECT_GRAPH = 'false';
   try {
     const isolated = await pnpm([
       'nx',
@@ -955,11 +963,18 @@ it('infers targets through isolated plugin workers and respects Nx registration 
       '--json',
     ]);
     expect(isolated.code, isolated.text).toBe(0);
+    expect(isolated.text).not.toMatch(
+      /running plugins in the main process|denied permission|could not start a plugin worker|EPERM|EACCES/i,
+    );
     expect(parsedJson(isolated.text).targets['check-boundaries'].executor).toBe(
       '@hao-nx-toolkit/project-boundary:check',
     );
   } finally {
-    environment.NX_ISOLATE_PLUGINS = 'false';
+    if (previousIsolation === undefined) delete environment.NX_ISOLATE_PLUGINS;
+    else environment.NX_ISOLATE_PLUGINS = previousIsolation;
+    if (previousGraphCache === undefined)
+      delete environment.NX_CACHE_PROJECT_GRAPH;
+    else environment.NX_CACHE_PROJECT_GRAPH = previousGraphCache;
   }
   const settings = read('nx.json');
   const registration = settings.plugins.find(
@@ -984,6 +999,7 @@ it('infers targets through isolated plugin workers and respects Nx registration 
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
   ]);
   expect(full.code, full.text).toBe(1);
   expect(full.text).toContain('not covered');
@@ -1001,6 +1017,7 @@ it('reports missing inference registration during a full workspace check', async
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
   ]);
   expect(full.code, full.text).toBe(1);
   expect(full.text).toContain('not covered');
