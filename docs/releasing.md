@@ -1,10 +1,12 @@
 # Releasing Hao Nx Toolkit
 
-This guide prepares the first public `0.1.0` release of `@hao-nx-toolkit/golang` and `@hao-nx-toolkit/project-boundary`. They share a fixed toolkit version. Only these two projects are configured in Nx Release; the private repository root and E2E projects are excluded.
+The first public release, `0.1.0`, was published to npm on **2026-10-17 (Asia/Taipei)**: [@hao-nx-toolkit/golang@0.1.0](https://www.npmjs.com/package/@hao-nx-toolkit/golang/v/0.1.0) and [@hao-nx-toolkit/project-boundary@0.1.0](https://www.npmjs.com/package/@hao-nx-toolkit/project-boundary/v/0.1.0). Both packages have `latest` set to `0.1.0`. See the [release notes](./releases/0.1.0.md).
 
-Release preparation in this change leaves both manifests at development version `0.0.1`. The [0.1.0 notes](./releases/0.1.0.md) are a draft. Validation and dry runs do not publish to npm. The commands in **Prepare the local release** and **Publish later** are separate operator actions to perform when the release is approved.
+**Do not rerun version preparation or publication for `0.1.0`.** The first-release commands below are a historical recipe. Both packages are fully published; a later release must use a new version. Only these two projects belong to Nx's fixed release group; the private repository root and E2E projects are excluded.
 
-## Prerequisites
+The published artifacts were built from commit [`615a781`](https://github.com/hao0731/hao-nx-toolkit/commit/615a781bbae0092367822fd48108f03d63f93876). Registry downloads match the audited tarballs byte for byte. The local annotated `v0.1.0` tag stays on that commit; documentation updates do not move it. Pushing the release tag and creating a GitHub Release require separate authorization and are not automatic consequences of a documentation PR.
+
+## Historical first-release prerequisites
 
 - Use a clean checkout containing all reviewed release preparation changes. Commit those changes before preparing the local release. Confirm the branch and `git status --short`, and check that the intended `v0.1.0` tag does not already exist locally or on the release remote.
 - Match CI: Node.js 24, pnpm 11.20.0, and Go 1.26.2. The workspace pins Nx 23.2.0; use `pnpm nx`, not a global Nx installation.
@@ -12,7 +14,9 @@ Release preparation in this change leaves both manifests at development version 
 - Own or have publishing permission for the npm `@hao-nx-toolkit` scope and both package names. A GitHub repository name does not grant npm scope access. Confirm that neither `0.1.0` package version is already published before starting a new release.
 - For interactive publication, have an npm account with 2FA configured and its browser/security-key or one-time-password verification available. Use the current npm CLI with the Node installation. Authenticate only when ready to publish; do not store tokens in repository files. See [npm scoped public package publishing](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/) and [npm 2FA](https://docs.npmjs.com/using-two-factor-authentication).
 
-## Validate without publishing
+## Historical first-release validation
+
+The commands below record validation before version preparation, starting from `0.0.1`. On a current `0.1.0` checkout, only the checks and package inspection remain repeatable; skip the release dry run and version preparation. They have already completed.
 
 From the repository root on the reviewed preparation branch, compare formatting against the release base, following the pull-request CI check. The example uses `origin/main`; ensure that remote-tracking reference is available and current. If the preparation changes are already merged into main, use the commit before those changes as `--base` instead, so the intended release changes remain in the comparison.
 
@@ -39,9 +43,9 @@ The configured pre-version command builds just these plugins using pnpm. Inspect
 
 The publish roots are **`packages/golang` and `packages/project-boundary`**, each containing its manifest and compiled `dist/`. Publishing `dist/` alone omits package metadata and generator/executor registration files. The manifests set public access and `https://registry.npmjs.org/` explicitly.
 
-## Prepare the local release
+## Historical local preparation
 
-Run this only when the dry run and checks have passed and release preparation is approved:
+This transition from `0.0.1` to `0.1.0` is complete. The historical recipe was:
 
 ```bash
 pnpm nx release 0.1.0 --first-release --skip-publish
@@ -49,31 +53,31 @@ pnpm nx release 0.1.0 --first-release --skip-publish
 
 This changes both manifests to `0.1.0`, updates the lockfile as needed, generates the root `CHANGELOG.md`, and creates a local release commit and `v0.1.0` tag. Nx Release is configured with `git.push: false`, so this step does not push. `--skip-publish` is essential: it skips npm publication. Do not run this non-dry-run step merely to validate the preparation PR.
 
-Review the generated changelog against the draft notes, the release commit, the tag, and any lockfile changes. Check the package versions and rerun package inventory inspection and the full checks on the prepared release. If corrections are needed, finalize the corrected release commit and ensure the local tag points to that exact commit before publication. Mark the draft notes and compatibility entry as released only after successful publication.
+Review the generated changelog against the release notes, the release commit, the tag, and any lockfile changes. Check the package versions and rerun package inventory inspection and the full checks on the prepared release. If corrections are needed, finalize the corrected release commit and ensure the local tag points to that exact commit before publication. Mark the release notes and compatibility entry as released only after successful publication.
 
 Keep the prepared release checkout and build artifacts available until both packages have been published and verified. Running version preparation again is unnecessary after this point.
 
-## Publish later — explicit operator action
+## Completed publication from verified tarballs
 
-The following commands perform external publication. Execute them only after approving the prepared release and verifying both manifests are already `0.1.0`:
+For `0.1.0`, publication used the already built and audited `.tgz` files from release commit `615a781`, rather than rebuilding or repacking from a later checkout. Each artifact was submitted with `npm publish <verified-tarball.tgz> --access public --registry=https://registry.npmjs.org/`, using its exact audited file:
 
-```bash
-npm login --registry=https://registry.npmjs.org/
-npm whoami --registry=https://registry.npmjs.org/
-pnpm nx release publish --first-release --access public --dry-run
-pnpm nx release publish --first-release --access public
-```
+- `hao-nx-toolkit-golang-0.1.0.tgz`
+- `hao-nx-toolkit-project-boundary-0.1.0.tgz`
 
-Inspect the dry-run package contents and registry before running the final command. Complete the npm authentication prompt as required. The first-release publish command uses existing on-disk versions and does not run version preparation or build; build artifacts must already exist. A publish dry run does not prove npm scope permission or 2FA readiness.
+These are historical publication commands, not instructions to publish `0.1.0` again. Browser-based npm 2FA was completed during publication. Registry visibility can lag during npm scanning; check the version and integrity rather than retrying publication solely because it is not immediately visible.
 
-Verify both package versions on the public registry:
+Both versions and their `latest` tags were verified on the public registry, and the downloaded tarballs were compared byte for byte with the audited artifacts. These read-only checks remain repeatable:
 
 ```bash
 npm view @hao-nx-toolkit/golang@0.1.0 version dist.integrity --registry=https://registry.npmjs.org/
 npm view @hao-nx-toolkit/project-boundary@0.1.0 version dist.integrity --registry=https://registry.npmjs.org/
 ```
 
-After both publications and consumer checks succeed, push the reviewed release commit through the repository's normal branch/PR process and push the specific `v0.1.0` tag to the release remote. For a direct release from the approved branch with remote `origin`, the commands are `git push origin HEAD` and `git push origin v0.1.0`; adapt the branch workflow to repository protection rules. Create a GitHub Release for that tag using the reviewed changelog and draft notes. Record the completed publication in the README compatibility table and release notes through the normal review process.
+Before publication, 199 unit tests and 78 packed-artifact E2E checks passed across Nx 23.2.0, 23.2.1, and 23.3.0. A separate strict-peer installation from the public registry and smoke test passed on Nx 23.2.0, including package entrypoints, Go model generation and compilation, and boundary initialization. Workspace and per-project boundary checks passed; the workspace JSON report recorded `success: true`, no violations, and no errors. Registry smoke testing on the baseline does not claim a second full three-version registry test run.
+
+## Release tag and GitHub Release
+
+Keep the local annotated `v0.1.0` tag on `615a781`, the commit that produced the published artifacts. Do not move it onto a later publication-status documentation commit. Pushing this tag and creating a GitHub Release are separate future actions requiring authorization; do not perform them automatically after opening or merging the documentation PR. A later GitHub Release can use the reviewed changelog and release notes.
 
 ## Registry consumer smoke test
 
@@ -101,6 +105,8 @@ The explicit `nx.json` establishes the disposable directory as an Nx workspace b
 For inline boundary task diagnostics, pass `--output-style=static` before the executor's `--` separator, for example `npx nx run hao-nx-toolkit-0.1.0-smoke:check-boundaries-all --output-style=static -- --outputFile=reports/boundaries.json` (use the root name printed by initialization). Nx 23.3.0 can otherwise summarize noninteractive failures with a log-file reference. The exit status and JSON report retain their meaning in either output mode.
 
 ## Recover a partial publication
+
+This recovery procedure applies only to an incomplete future publication. Both `0.1.0` packages are already published and verified; do not retry their publication.
 
 A release can publish one package successfully and fail on the other. Keep the prepared release commit, tag, package versions, and validated artifacts. Check the exact versions on npm using the `npm view` commands above; distinguish an actual missing version from an authentication, network, or registry error.
 
