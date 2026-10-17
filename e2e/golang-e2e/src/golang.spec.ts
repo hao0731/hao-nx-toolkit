@@ -4,6 +4,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -14,6 +15,14 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
+const nxVersion = process.env.TOOLKIT_E2E_NX_VERSION ?? '23.2.0';
+if (
+  !/^23\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(nxVersion) ||
+  Number(nxVersion.split('.')[1]) < 2
+)
+  throw new Error(
+    `TOOLKIT_E2E_NX_VERSION must be an exact stable Nx version within ^23.2.0; received ${JSON.stringify(nxVersion)}`,
+  );
 let temporary: string;
 let consumer: string;
 let environment: NodeJS.ProcessEnv;
@@ -60,6 +69,7 @@ async function generate(args: string[], cwd = consumer, kind = 'handler') {
 }
 
 beforeAll(async () => {
+  console.info(`Installed-package compatibility: golang with Nx ${nxVersion}`);
   sourceManifest = readFileSync(
     join(repository, 'packages/golang/package.json'),
     'utf8',
@@ -110,7 +120,7 @@ beforeAll(async () => {
     name: 'golang-fixture',
     private: true,
     devDependencies: {
-      nx: '23.2.0',
+      nx: nxVersion,
       '@hao-nx-toolkit/golang': `file:${tarball}`,
     },
   });
@@ -122,10 +132,50 @@ beforeAll(async () => {
   const installed = await command('pnpm', [
     'install',
     '--no-frozen-lockfile',
+    '--strict-peer-dependencies',
     '--store-dir',
     join(temporary, 'store'),
   ]);
   expect(installed.code, installed.text).toBe(0);
+  // Inspect the installed consumer, including transitive devkit resolution: an
+  // auto-installed nested baseline Nx must not make a newer-version run pass.
+  const runtime = await command('pnpm', [
+    'exec',
+    'node',
+    '--eval',
+    `const {createRequire} = require('node:module');
+const {realpathSync} = require('node:fs');
+const {join} = require('node:path');
+const root = createRequire(join(process.cwd(), 'package.json'));
+const plugin = createRequire(root.resolve('@hao-nx-toolkit/golang/package.json'));
+const devkit = createRequire(plugin.resolve('@nx/devkit/package.json'));
+const result = [root, plugin, devkit].map(resolve => {
+  const path = resolve.resolve('nx/package.json');
+  return {version: resolve('nx/package.json').version, path: realpathSync(path)};
+});
+console.log('TOOLKIT_NX_RESOLUTION=' + JSON.stringify(result));`,
+  ]);
+  expect(runtime.code, runtime.text).toBe(0);
+  const runtimeResult = runtime.text
+    .split('\n')
+    .find((line) => line.startsWith('TOOLKIT_NX_RESOLUTION='));
+  expect(runtimeResult, runtime.text).toBeDefined();
+  const resolutions = JSON.parse(
+    runtimeResult!.slice('TOOLKIT_NX_RESOLUTION='.length),
+  ) as {
+    version: string;
+    path: string;
+  }[];
+  for (const resolution of resolutions) {
+    expect(resolution.version, JSON.stringify(resolutions)).toBe(nxVersion);
+    expect(
+      resolution.path.startsWith(realpathSync(consumer) + '/'),
+      JSON.stringify(resolutions),
+    ).toBe(true);
+  }
+  const cli = await command('pnpm', ['nx', '--version']);
+  expect(cli.code, cli.text).toBe(0);
+  expect(cli.text).toContain(`Local: v${nxVersion}`);
 }, 240_000);
 
 afterAll(() => {

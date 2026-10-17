@@ -65,7 +65,7 @@
     "nx": "23.2.0"
   },
   "peerDependencies": {
-    "nx": "23.2.0"
+    "nx": "^23.2.0"
   },
   "description": "Tag-based project dependency boundary checks for Nx workspaces.",
   "license": "MIT",
