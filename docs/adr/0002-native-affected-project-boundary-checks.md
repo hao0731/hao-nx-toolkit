@@ -4,6 +4,8 @@ status: accepted
 
 # Native affected project boundary checks
 
+The persisted-target initialization and migration decisions below are superseded by [ADR 0003](./0003-root-inferred-project-boundary-targets.md). Native affected selection, dependency scope, and report semantics remain in effect.
+
 Amend [ADR 0001](./0001-standalone-project-boundary-checker.md)'s single-root execution design: native `nx affected -t check-boundaries` needs a target on each source project. Initialization now configures each project's own project boundary check and a separate root `check-boundaries-all` workspace boundary check. This uses Nx's existing affected selection and reverse dependent propagation, avoiding a second Git selection implementation.
 
 ## Consequences

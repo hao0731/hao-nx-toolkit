@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import {
+  existsSync,
   mkdtempSync,
   readdirSync,
   mkdirSync,
@@ -209,7 +210,16 @@ it('installs the packaged plugin and initializes a runnable uncached root target
     '--no-interactive',
   ]);
   expect(initialized.code, initialized.text).toBe(0);
-  expect(read('package.json').nx.targets['check-boundaries']).toMatchObject({
+  expect(read('package.json').nx.targets['check-boundaries']).toBeUndefined();
+  const resolved = await pnpm([
+    'nx',
+    'show',
+    'project',
+    'boundary-fixture',
+    '--json',
+  ]);
+  expect(resolved.code, resolved.text).toBe(0);
+  expect(parsedJson(resolved.text).targets['check-boundaries']).toMatchObject({
     executor: '@hao-nx-toolkit/project-boundary:check',
     cache: false,
   });
@@ -524,7 +534,13 @@ module.exports.createNodesV2 = ['**/inferred.marker', async (files) => files.map
   json('nx.json', {
     analytics: false,
     neverConnectToCloud: true,
-    plugins: ['./tools/inference.cjs'],
+    plugins: [
+      './tools/inference.cjs',
+      {
+        plugin: '@hao-nx-toolkit/project-boundary',
+        options: { projectMarkers: ['**/inferred.marker'] },
+      },
+    ],
   });
   json('project-boundary.config.json', {
     depConstraints: [
@@ -544,25 +560,15 @@ module.exports.createNodesV2 = ['**/inferred.marker', async (files) => files.map
   ];
   const initialized = await pnpm(initArgs);
   expect(initialized.code, initialized.text).toBe(0);
-  const inferredFile = read('projects/inferred/project.json');
-  expect(inferredFile.name).toBe('inferred');
-  expect(Object.keys(inferredFile.targets)).toEqual(['check-boundaries']);
-  expect(inferredFile.targets['check-boundaries'].options.project).toBe(
-    'inferred',
+  expect(existsSync(join(consumer, 'projects/inferred/project.json'))).toBe(
+    false,
   );
-  expect(
-    read('packages/packaged/package.json').nx.targets['check-boundaries']
-      .options.project,
-  ).toBe('packaged');
-  const inferredBefore = readFileSync(
-    join(consumer, 'projects/inferred/project.json'),
-    'utf8',
-  );
+  expect(read('packages/packaged/package.json').nx.targets).toBeUndefined();
   const repeated = await pnpm(initArgs);
   expect(repeated.code, repeated.text).toBe(0);
-  expect(
-    readFileSync(join(consumer, 'projects/inferred/project.json'), 'utf8'),
-  ).toBe(inferredBefore);
+  expect(existsSync(join(consumer, 'projects/inferred/project.json'))).toBe(
+    false,
+  );
   const inferredResolved = await pnpm([
     'nx',
     'show',
@@ -749,130 +755,303 @@ module.exports.createNodesV2 = ['**/inferred.marker', async (files) => files.map
   });
 }, 120_000);
 
-it('rejects effective wildcard and filtered source conflicts transactionally and migrates inherited reporting configurations', async () => {
-  const files = [
-    'package.json',
-    'project-boundary.config.json',
-    'apps/app/project.json',
-    'libs/lib/project.json',
-    'libs/downstream/project.json',
-    'apps/incoming/project.json',
-    'apps/sibling/project.json',
-    'projects/inferred/project.json',
-    'packages/packaged/package.json',
-  ];
-  const nxSettings = read('nx.json');
-  for (const targetDefaults of [
-    {
-      'check-*': {
-        defaultConfiguration: 'ci',
-        configurations: { ci: { project: 'other' } },
-      },
-    },
-    {
-      'check-boundaries': [
-        { filter: { projects: ['missing'] }, options: { project: 'other' } },
-        {
-          filter: {
-            projects: ['tag:scope:app'],
-            executor: '@hao-nx-toolkit/project-boundary:check',
-          },
-          configurations: { ci: { project: 'lib' } },
-        },
-      ],
-    },
-  ]) {
-    json('nx.json', { ...nxSettings, targetDefaults });
-    const before = files.map((file) =>
-      readFileSync(join(consumer, file), 'utf8'),
-    );
-    const rejected = await pnpm([
-      'nx',
-      'g',
-      '@hao-nx-toolkit/project-boundary:init',
-      '--no-interactive',
-    ]);
-    expect(rejected.code, rejected.text).toBe(1);
-    expect(rejected.text).toContain(
-      'conflicting configuration project selector',
-    );
-    expect(
-      files.map((file) => readFileSync(join(consumer, file), 'utf8')),
-    ).toEqual(before);
-  }
-  const root = read('package.json');
-  root.nx.targets['check-boundaries'] = {
-    executor: '@hao-nx-toolkit/project-boundary:check',
-    configurations: {
-      explicit: { outputFile: 'reports/migrated-explicit.json' },
-    },
-  };
-  delete root.nx.targets['check-boundaries-all'];
-  json('package.json', root);
+it('reports uncovered projects only at init and full checks, and accepts root marker configuration', async () => {
   json('project-boundary.config.json', {
     depConstraints: [{ sourceTag: '*' }],
   });
-  json('nx.json', {
-    ...nxSettings,
-    targetDefaults: {
-      'check-boundaries': [
-        {
-          filter: { plugin: 'unrelated-inference-plugin' },
-          options: { project: 'wrong' },
-        },
-        {
-          filter: { projects: ['boundary-fixture'] },
-          defaultConfiguration: 'ci',
-          inputs: ['{projectRoot}/custom.txt'],
-          configurations: {
-            ci: { outputFile: 'reports/migrated-default.json' },
-            manual: { outputFile: 'reports/migrated-manual.json' },
-          },
-        },
-      ],
-    },
-  });
-  const migrated = await pnpm([
+  const settings = read('nx.json');
+  settings.plugins = settings.plugins.filter(
+    (entry: string | { plugin: string }) =>
+      (typeof entry === 'string' ? entry : entry.plugin) !==
+      '@hao-nx-toolkit/project-boundary',
+  );
+  settings.plugins.push({ plugin: '@hao-nx-toolkit/project-boundary' });
+  json('nx.json', settings);
+  const shown = await pnpm(['nx', 'show', 'project', 'inferred', '--json']);
+  expect(shown.code, shown.text).toBe(0);
+  expect(parsedJson(shown.text).targets['check-boundaries']).toBeUndefined();
+  const build = await pnpm(['nx', 'run', 'inferred:build']);
+  expect(build.code, build.text).toBe(0);
+  const affected = await pnpm([
+    'nx',
+    'affected',
+    '-t',
+    'check-boundaries',
+    '--files=apps/app/index.ts',
+    '--output-style=static',
+  ]);
+  expect(affected.code, affected.text).toBe(0);
+  const rootBefore = readFileSync(join(consumer, 'package.json'), 'utf8');
+  const nxBefore = readFileSync(join(consumer, 'nx.json'), 'utf8');
+  const policyBefore = readFileSync(
+    join(consumer, 'project-boundary.config.json'),
+    'utf8',
+  );
+  const init = await pnpm([
     'nx',
     'g',
     '@hao-nx-toolkit/project-boundary:init',
     '--no-interactive',
   ]);
-  expect(migrated.code, migrated.text).toBe(0);
-  expect(read('package.json').nx.targets['check-boundaries-all']).toMatchObject(
-    {
-      defaultConfiguration: 'ci',
-      inputs: [
-        '{projectRoot}/custom.txt',
-        'default',
-        '{workspaceRoot}/project-boundary.config.json',
-      ],
-      configurations: {
-        ci: { outputFile: 'reports/migrated-default.json' },
-        manual: { outputFile: 'reports/migrated-manual.json' },
-        explicit: { outputFile: 'reports/migrated-explicit.json' },
-      },
-    },
+  expect(init.code, init.text).toBe(1);
+  expect(init.text).toContain('inferred');
+  expect(init.text).toContain('projectMarkers');
+  expect(readFileSync(join(consumer, 'package.json'), 'utf8')).toBe(rootBefore);
+  expect(readFileSync(join(consumer, 'nx.json'), 'utf8')).toBe(nxBefore);
+  expect(
+    readFileSync(join(consumer, 'project-boundary.config.json'), 'utf8'),
+  ).toBe(policyBefore);
+  const full = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries-all',
+    '--outputFile=reports/uncovered.json',
+  ]);
+  expect(full.code, full.text).toBe(1);
+  expect(read('reports/uncovered.json')).toMatchObject({
+    success: false,
+    errors: [
+      { kind: 'configuration', message: expect.stringContaining('inferred') },
+    ],
+  });
+  settings.plugins[settings.plugins.length - 1].options = {
+    projectMarkers: ['**/inferred.marker'],
+  };
+  json('nx.json', settings);
+  const restored = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(restored.code, restored.text).toBe(0);
+  const complete = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries-all',
+  ]);
+  expect(complete.code, complete.text).toBe(0);
+  expect(existsSync(join(consumer, 'projects/inferred/project.json'))).toBe(
+    false,
   );
-  for (const [configuration, file] of [
-    [undefined, 'default'],
-    ['manual', 'manual'],
-    ['explicit', 'explicit'],
-  ]) {
-    const result = await pnpm([
+}, 120_000);
+
+it('automatically discovers new standard projects and only package-manager workspace members', async () => {
+  json('apps/new/project.json', { name: 'new-app' });
+  json('packages/new/package.json', { name: '@fixture/new', private: true });
+  json('packages/excluded/package.json', {
+    name: '@fixture/excluded',
+    private: true,
+  });
+  json('fixtures/nonmember/package.json', {
+    name: '@fixture/nonmember',
+    private: true,
+  });
+  writeFileSync(
+    join(consumer, 'pnpm-workspace.yaml'),
+    `packages: ['packages/*', '!packages/excluded']\nstoreDir: ${JSON.stringify(join(temporary, 'store'))}\nallowBuilds:\n  nx: true\n`,
+  );
+  const appBefore = readFileSync(
+    join(consumer, 'apps/new/project.json'),
+    'utf8',
+  );
+  const packageBefore = readFileSync(
+    join(consumer, 'packages/new/package.json'),
+    'utf8',
+  );
+  const projects = await pnpm(['nx', 'show', 'projects', '--json']);
+  expect(projects.code, projects.text).toBe(0);
+  expect(JSON.parse(projects.text.trim())).toEqual(
+    expect.arrayContaining(['new-app', '@fixture/new']),
+  );
+  expect(JSON.parse(projects.text.trim())).not.toContain('@fixture/excluded');
+  expect(JSON.parse(projects.text.trim())).not.toContain('@fixture/nonmember');
+  for (const name of ['new-app', '@fixture/new']) {
+    const shown = await pnpm(['nx', 'show', 'project', name, '--json']);
+    expect(shown.code, shown.text).toBe(0);
+    expect(parsedJson(shown.text).targets['check-boundaries']).toMatchObject({
+      executor: '@hao-nx-toolkit/project-boundary:check',
+      cache: false,
+    });
+    const run = await pnpm([
       'nx',
       'run',
-      'boundary-fixture:check-boundaries-all',
-      '--output-style=static',
-      ...(configuration ? [`--configuration=${configuration}`] : []),
+      `${name}:check-boundaries`,
+      '--outputFile=reports/new-{boundaryProjectName}.json',
     ]);
-    expect(result.code, result.text).toBe(0);
-    expect(read(`reports/migrated-${file}.json`)).toMatchObject({
-      scope: { kind: 'workspace' },
-      success: true,
-    });
+    expect(run.code, run.text).toBe(0);
   }
-  const before = readFileSync(join(consumer, 'package.json'), 'utf8');
+  expect(readFileSync(join(consumer, 'apps/new/project.json'), 'utf8')).toBe(
+    appBefore,
+  );
+  expect(
+    readFileSync(join(consumer, 'packages/new/package.json'), 'utf8'),
+  ).toBe(packageBefore);
+  expect(
+    readdirSync(join(consumer, 'reports')).filter((name) =>
+      name.startsWith('new-project-'),
+    ),
+  ).toHaveLength(2);
+}, 120_000);
+
+it('honors Nx defaults and explicit same-name target overrides without coverage conflicts', async () => {
+  const settings = read('nx.json');
+  settings.targetDefaults = {
+    'check-boundaries': {
+      cache: true,
+      options: { project: 'lib', outputFile: 'reports/default.json' },
+    },
+  };
+  json('nx.json', settings);
+  const lib = read('libs/lib/project.json');
+  lib.targets = {
+    'check-boundaries': { command: 'echo explicit-boundary-override' },
+  };
+  json('libs/lib/project.json', lib);
+  const authored = readFileSync(
+    join(consumer, 'libs/lib/project.json'),
+    'utf8',
+  );
+  const init = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(init.code, init.text).toBe(0);
+  expect(readFileSync(join(consumer, 'libs/lib/project.json'), 'utf8')).toBe(
+    authored,
+  );
+  const app = await pnpm(['nx', 'show', 'project', 'app', '--json']);
+  expect(app.code, app.text).toBe(0);
+  expect(parsedJson(app.text).targets['check-boundaries']).toMatchObject({
+    cache: true,
+    options: { project: 'lib', outputFile: 'reports/default.json' },
+  });
+  const redirected = await pnpm(['nx', 'run', 'app:check-boundaries']);
+  expect(redirected.code, redirected.text).toBe(0);
+  expect(read('reports/default.json')).toMatchObject({
+    scope: { kind: 'project', project: 'lib' },
+  });
+  const overridden = await pnpm([
+    'nx',
+    'run',
+    'lib:check-boundaries',
+    '--output-style=static',
+  ]);
+  expect(overridden.code, overridden.text).toBe(0);
+  expect(overridden.text).toContain('explicit-boundary-override');
+  const all = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries-all',
+  ]);
+  expect(all.code, all.text).toBe(0);
+}, 120_000);
+
+it('infers targets through isolated plugin workers and respects Nx registration filters', async () => {
+  const previousIsolation = environment.NX_ISOLATE_PLUGINS;
+  const previousGraphCache = environment.NX_CACHE_PROJECT_GRAPH;
+  environment.NX_ISOLATE_PLUGINS = 'true';
+  environment.NX_CACHE_PROJECT_GRAPH = 'false';
+  try {
+    const isolated = await pnpm([
+      'nx',
+      'show',
+      'project',
+      'inferred',
+      '--json',
+    ]);
+    expect(isolated.code, isolated.text).toBe(0);
+    expect(isolated.text).not.toMatch(
+      /running plugins in the main process|denied permission|could not start a plugin worker|EPERM|EACCES/i,
+    );
+    expect(parsedJson(isolated.text).targets['check-boundaries'].executor).toBe(
+      '@hao-nx-toolkit/project-boundary:check',
+    );
+  } finally {
+    if (previousIsolation === undefined) delete environment.NX_ISOLATE_PLUGINS;
+    else environment.NX_ISOLATE_PLUGINS = previousIsolation;
+    if (previousGraphCache === undefined)
+      delete environment.NX_CACHE_PROJECT_GRAPH;
+    else environment.NX_CACHE_PROJECT_GRAPH = previousGraphCache;
+  }
+  const settings = read('nx.json');
+  const registration = settings.plugins.find(
+    (entry: string | { plugin: string }) =>
+      typeof entry === 'object' &&
+      entry.plugin === '@hao-nx-toolkit/project-boundary',
+  );
+  registration.exclude = ['nx.json'];
+  json('nx.json', settings);
+  const shown = await pnpm(['nx', 'show', 'project', 'app', '--json']);
+  expect(shown.code, shown.text).toBe(0);
+  expect(parsedJson(shown.text).targets['check-boundaries']).toBeUndefined();
+  const init = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(init.code, init.text).toBe(1);
+  expect(init.text).toContain('not covered');
+  const full = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
+  ]);
+  expect(full.code, full.text).toBe(1);
+  expect(full.text).toContain('not covered');
+}, 120_000);
+
+it('reports missing inference registration during a full workspace check', async () => {
+  const settings = read('nx.json');
+  settings.plugins = [];
+  delete settings.targetDefaults;
+  json('nx.json', settings);
+  const shown = await pnpm(['nx', 'show', 'project', 'app', '--json']);
+  expect(shown.code, shown.text).toBe(0);
+  expect(parsedJson(shown.text).targets['check-boundaries']).toBeUndefined();
+  const full = await pnpm([
+    'nx',
+    'run',
+    'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
+  ]);
+  expect(full.code, full.text).toBe(1);
+  expect(full.text).toContain('not covered');
+}, 60_000);
+
+it('initializes a runnable root target when its package name belongs to a child project', async () => {
+  const rootPackage = read('package.json');
+  rootPackage.name = 'app';
+  delete rootPackage.nx;
+  json('package.json', rootPackage);
+  const childBefore = readFileSync(
+    join(consumer, 'apps/app/project.json'),
+    'utf8',
+  );
+  const init = await pnpm([
+    'nx',
+    'g',
+    '@hao-nx-toolkit/project-boundary:init',
+    '--no-interactive',
+  ]);
+  expect(init.code, init.text).toBe(0);
+  const rootName = read('package.json').nx.name;
+  expect(rootName).not.toBe('app');
+  expect(read('package.json').name).toBe('app');
+  const shown = await pnpm(['nx', 'show', 'project', rootName, '--json']);
+  expect(shown.code, shown.text).toBe(0);
+  expect(parsedJson(shown.text).root).toBe('.');
+  const full = await pnpm([
+    'nx',
+    'run',
+    `${rootName}:check-boundaries-all`,
+    '--output-style=static',
+  ]);
+  expect(full.code, full.text).toBe(0);
   const repeated = await pnpm([
     'nx',
     'g',
@@ -880,231 +1059,8 @@ it('rejects effective wildcard and filtered source conflicts transactionally and
     '--no-interactive',
   ]);
   expect(repeated.code, repeated.text).toBe(0);
-  expect(readFileSync(join(consumer, 'package.json'), 'utf8')).toBe(before);
-}, 60_000);
-
-it('preserves Nx spread behavior and validates inferred boundary layers and inherited executors', async () => {
-  const expectedExecutor = '@hao-nx-toolkit/project-boundary:check';
-  const settings = read('nx.json');
-  json('apps/app/project.json', {
-    ...read('apps/app/project.json'),
-    targets: {
-      'check-boundaries': {
-        defaultConfiguration: 'local',
-        '...': true,
-        executor: expectedExecutor,
-        options: {
-          outputFile: 'reports/ignored-options.json',
-          '...': true,
-          project: 'app',
-        },
-        configurations: {
-          local: { outputFile: 'reports/local.json' },
-          ci: { outputFile: 'reports/ignored-ci.json', '...': true },
-        },
-      },
-    },
-  });
-  const root = read('package.json');
-  root.nx.targets['check-boundaries-all'] = {
-    cache: false,
-    '...': true,
-    executor: expectedExecutor,
-    options: { '...': true },
-  };
-  json('package.json', root);
-  json('nx.json', {
-    ...settings,
-    targetDefaults: {
-      'check-boundaries': [
-        {
-          filter: { projects: ['app'] },
-          defaultConfiguration: 'ci',
-          cache: true,
-          options: { outputFile: 'reports/base-options.json' },
-          configurations: { ci: { outputFile: 'reports/spread-ci.json' } },
-        },
-      ],
-      'check-boundaries-all': {
-        cache: true,
-        options: { outputFile: 'reports/spread-all.json' },
-      },
-    },
-  });
-  const before = await pnpm(['nx', 'show', 'project', 'app', '--json']);
-  expect(before.code, before.text).toBe(0);
-  expect(
-    parsedJson(before.text).targets['check-boundaries'].defaultConfiguration,
-  ).toBe('ci');
-  const initArgs = [
-    'nx',
-    'g',
-    '@hao-nx-toolkit/project-boundary:init',
-    '--no-interactive',
-  ];
-  const initialized = await pnpm(initArgs);
-  expect(initialized.code, initialized.text).toBe(0);
-  const app = await pnpm(['nx', 'show', 'project', 'app', '--json']);
-  expect(app.code, app.text).toBe(0);
-  expect(parsedJson(app.text).targets['check-boundaries']).toMatchObject({
-    executor: expectedExecutor,
-    defaultConfiguration: 'ci',
-    cache: false,
-    inputs: expect.arrayContaining([
-      'default',
-      '{workspaceRoot}/project-boundary.config.json',
-    ]),
-    options: { project: 'app' },
-    configurations: { ci: { outputFile: 'reports/spread-ci.json' } },
-  });
-  const appRun = await pnpm([
-    'nx',
-    'run',
-    'app:check-boundaries',
-    '--output-style=static',
-  ]);
-  expect(appRun.code, appRun.text).toBe(0);
-  expect(read('reports/spread-ci.json')).toMatchObject({
-    scope: { kind: 'project', project: 'app' },
-    success: true,
-  });
-  const all = await pnpm([
-    'nx',
-    'show',
-    'project',
-    'boundary-fixture',
-    '--json',
-  ]);
-  expect(all.code, all.text).toBe(0);
-  const allTarget = parsedJson(all.text).targets['check-boundaries-all'];
-  expect(allTarget.cache).toBe(false);
-  expect(allTarget.executor).toBe(expectedExecutor);
-  expect(allTarget.options.project).toBeUndefined();
-  const allRun = await pnpm([
-    'nx',
-    'run',
-    'boundary-fixture:check-boundaries-all',
-    '--output-style=static',
-  ]);
-  expect(allRun.code, allRun.text).toBe(0);
-  expect(read('reports/spread-all.json')).toMatchObject({
-    scope: { kind: 'workspace' },
-    success: true,
-  });
-  const stable = readFileSync(join(consumer, 'apps/app/project.json'), 'utf8');
-  const repeated = await pnpm(initArgs);
-  expect(repeated.code, repeated.text).toBe(0);
+  expect(read('package.json').nx.name).toBe(rootName);
   expect(readFileSync(join(consumer, 'apps/app/project.json'), 'utf8')).toBe(
-    stable,
+    childBefore,
   );
-
-  const inferenceBefore = readFileSync(
-    join(consumer, 'tools/inference.cjs'),
-    'utf8',
-  );
-  writeFileSync(
-    join(consumer, 'tools/inference.cjs'),
-    `const {dirname} = require('node:path');
-module.exports.createNodesV2 = ['**/inferred.marker', async files => files.map(file => [file, {projects: {[dirname(file)]: {name: 'inferred', targets: {build: {command: 'echo inferred-build'}, 'check-boundaries': {executor: '${expectedExecutor}', defaultConfiguration: 'ci', configurations: {ci: {project: 'app'}}}}}}}])];\n`,
-  );
-  const persisted = readFileSync(
-    join(consumer, 'projects/inferred/project.json'),
-    'utf8',
-  );
-  const rejected = await pnpm(initArgs);
-  expect(rejected.code, rejected.text).toBe(1);
-  expect(rejected.text).toContain('conflicting configuration project selector');
-  expect(
-    readFileSync(join(consumer, 'projects/inferred/project.json'), 'utf8'),
-  ).toBe(persisted);
-  writeFileSync(join(consumer, 'tools/inference.cjs'), inferenceBefore);
-  json('apps/app/project.json', {
-    ...read('apps/app/project.json'),
-    targets: { 'check-boundaries': { options: { project: 'app' } } },
-  });
-  json('nx.json', {
-    ...settings,
-    targetDefaults: { 'check-boundaries': { executor: expectedExecutor } },
-  });
-  const inherited = await pnpm(initArgs);
-  expect(inherited.code, inherited.text).toBe(0);
-  const resolved = await pnpm(['nx', 'show', 'project', 'app', '--json']);
-  expect(resolved.code, resolved.text).toBe(0);
-  expect(parsedJson(resolved.text).targets['check-boundaries']).toMatchObject({
-    executor: expectedExecutor,
-    cache: false,
-    options: { project: 'app' },
-  });
-}, 60_000);
-
-it('refuses fresh targets whose compatible unsafe defaults survive foreign executor entries', async () => {
-  json('apps/fresh-app/project.json', {
-    name: 'fresh-app',
-    tags: ['scope:app'],
-  });
-  json('apps/fresh-other/project.json', {
-    name: 'fresh-other',
-    tags: ['scope:other'],
-  });
-  json('nx.json', {
-    ...read('nx.json'),
-    targetDefaults: {
-      'check-boundaries': [
-        {
-          filter: { projects: ['fresh-app'] },
-          executor: '@hao-nx-toolkit/project-boundary:check',
-          defaultConfiguration: 'ci',
-          configurations: { ci: { project: 'fresh-other' } },
-        },
-        {
-          filter: { projects: ['fresh-app'] },
-          executor: 'nx:run-commands',
-          options: { command: 'echo unrelated' },
-        },
-      ],
-    },
-  });
-  const files = [
-    'package.json',
-    'project-boundary.config.json',
-    'nx.json',
-    'apps/fresh-app/project.json',
-    'apps/fresh-other/project.json',
-    'apps/app/project.json',
-    'projects/inferred/project.json',
-  ];
-  const before = files.map((file) =>
-    readFileSync(join(consumer, file), 'utf8'),
-  );
-  const result = await pnpm([
-    'nx',
-    'g',
-    '@hao-nx-toolkit/project-boundary:init',
-    '--no-interactive',
-  ]);
-  expect(result.code, result.text).toBe(1);
-  expect(result.text).toContain('conflicting configuration project selector');
-  expect(
-    files.map((file) => readFileSync(join(consumer, file), 'utf8')),
-  ).toEqual(before);
-  expect(read('apps/fresh-app/project.json').targets).toBeUndefined();
-  // Independently demonstrate the unsafe effective graph that initialization
-  // refused to create: Nx keeps compatible ci and drops the foreign executor.
-  json('apps/fresh-app/project.json', {
-    ...read('apps/fresh-app/project.json'),
-    targets: {
-      'check-boundaries': {
-        executor: '@hao-nx-toolkit/project-boundary:check',
-        options: { project: 'fresh-app' },
-      },
-    },
-  });
-  const graph = await pnpm(['nx', 'show', 'project', 'fresh-app', '--json']);
-  expect(graph.code, graph.text).toBe(0);
-  expect(parsedJson(graph.text).targets['check-boundaries']).toMatchObject({
-    executor: '@hao-nx-toolkit/project-boundary:check',
-    defaultConfiguration: 'ci',
-    options: { project: 'fresh-app' },
-    configurations: { ci: { project: 'fresh-other' } },
-  });
 }, 60_000);
