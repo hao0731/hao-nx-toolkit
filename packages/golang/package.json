@@ -17,7 +17,8 @@
   "files": [
     "dist",
     "!**/*.tsbuildinfo",
-    "generators.json"
+    "generators.json",
+    "LICENSE"
   ],
   "nx": {
     "name": "golang",
@@ -61,7 +62,31 @@
     "nx": "23.2.0"
   },
   "peerDependencies": {
-    "nx": "23.2.0"
+    "nx": "^23.2.0"
   },
-  "generators": "./generators.json"
+  "generators": "./generators.json",
+  "description": "Go model, config, service, repository, and handler generators for Nx workspaces.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hao0731/hao-nx-toolkit.git",
+    "directory": "packages/golang"
+  },
+  "homepage": "https://github.com/hao0731/hao-nx-toolkit/tree/main/packages/golang#readme",
+  "bugs": {
+    "url": "https://github.com/hao0731/hao-nx-toolkit/issues"
+  },
+  "keywords": [
+    "nx",
+    "nx-plugin",
+    "go",
+    "golang",
+    "generators",
+    "gin",
+    "echo"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
 }

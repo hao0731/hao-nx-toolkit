@@ -24,12 +24,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.26.2'
-          cache: false
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
@@ -43,11 +37,47 @@ jobs:
         run: pnpm nx format:check --base=origin/main --head=HEAD
 
       - name: Check affected projects against main
-        run: pnpm nx affected -t lint test build typecheck e2e --base=origin/main --head=HEAD
+        run: pnpm nx affected -t lint build typecheck --base=origin/main --head=HEAD
+
+      - name: Test affected unit suites
+        run: pnpm nx affected -t test --exclude='*-e2e' --base=origin/main --head=HEAD
 
   main:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.20.0
+          cache: true
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check all projects
+        run: pnpm nx run-many -t lint build typecheck
+
+      - name: Test unit suites
+        run: pnpm nx run-many -t test --exclude='*-e2e'
+
+  compatibility:
+    name: Installed-package E2E (Nx ${{ matrix.nx-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        nx-version: ['23.2.0', '23.2.1', '23.3.0']
+    env:
+      TOOLKIT_E2E_NX_VERSION: ${{ matrix.nx-version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -72,5 +102,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check all projects
-        run: pnpm nx run-many -t lint test build typecheck e2e
+      # Always run both consumers, even when only this version matrix changes.
+      - name: Verify installed plugins against selected Nx version
+        run: pnpm nx run-many -t e2e -p golang-e2e,project-boundary-e2e

@@ -8,7 +8,7 @@ The plugin supports workspace-wide, per-project, and affected checks, plus optio
 
 ## Compatibility
 
-This version requires **Nx 23.2.0 exactly**. See the [toolkit version compatibility table](../../README.md#nx-version-compatibility) when choosing a version for your workspace.
+This version accepts **Nx `^23.2.0`** (stable versions `>=23.2.0 <24.0.0`; prereleases excluded). Installed-package E2E tests verify **23.2.0, 23.2.1, and 23.3.0**. Other versions in the range have not yet been verified. See the [toolkit version compatibility table](https://github.com/hao0731/hao-nx-toolkit#nx-version-compatibility) when choosing a version for your workspace.
 
 ## Install and initialize
 
@@ -160,6 +160,8 @@ Nx also selects reverse dependents, so changing a dependency target's tags reche
 
 Checks return a nonzero exit code for boundary violations, invalid configuration, unknown project names, graph failures, or report-writing failures. You can use the command's exit code to fail CI.
 
+For inline task diagnostics, add `--output-style=static` to the Nx command. Nx 23.3.0 can otherwise summarize failed task output with a log-file reference in noninteractive runs. Put the flag before the `--` separator when forwarding executor options, for example `pnpm nx run store-app:check-boundaries --output-style=static -- --outputFile=reports/store-app.json`.
+
 ## Export JSON reports
 
 Add `outputFile` after the `--` separator:
@@ -221,3 +223,16 @@ The `--` separator before `--project` is required so Nx forwards the option to t
 - Allowed and denied rules evaluate direct targets. They do not walk transitive dependencies.
 - Dependency exceptions, project exclusions, cycle checks, buildable-project checks, and tag cardinality validation are not provided.
 - The plugin does not execute arbitrary Nx Conformance rules or claim complete behavioral equivalence with Nx Conformance.
+
+## Development verification
+
+From this repository's root:
+
+```bash
+pnpm nx run-many -p project-boundary -t lint test build typecheck
+TOOLKIT_E2E_NX_VERSION=23.3.0 pnpm nx e2e project-boundary-e2e
+```
+
+`TOOLKIT_E2E_NX_VERSION` defaults to `23.2.0` and accepts an exact stable version in `^23.2.0`. CI runs installed-package tests against `23.2.0`, `23.2.1`, and `23.3.0` on every pull request and main-branch push. Strict peer installation and runtime assertions verify the selected Nx at the consumer root, plugin, devkit dependency, and CLI. Tests exercise initialization, transactional conflict rejection, defaults and spreads, inferred projects, native affected checks, and reports.
+
+The initializer isolates target-default synthesis and merging behind the exported **`@nx/devkit/internal`** entry point; it no longer imports deep `nx/src/...` implementation paths. This entry point remains internal and carries no public API compatibility guarantee. The plugin pins `@nx/devkit` to the 23.2.0 baseline, and the installed-package matrix guards the currently verified consumer versions. Add future Nx 23.x versions to the matrix and pass these checks before calling them verified.

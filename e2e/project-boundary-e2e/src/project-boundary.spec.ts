@@ -4,6 +4,7 @@ import {
   readdirSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -14,6 +15,14 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
+const nxVersion = process.env.TOOLKIT_E2E_NX_VERSION ?? '23.2.0';
+if (
+  !/^23\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(nxVersion) ||
+  Number(nxVersion.split('.')[1]) < 2
+)
+  throw new Error(
+    `TOOLKIT_E2E_NX_VERSION must be an exact stable Nx version within ^23.2.0; received ${JSON.stringify(nxVersion)}`,
+  );
 let temporary: string;
 let consumer: string;
 let environment: NodeJS.ProcessEnv;
@@ -68,6 +77,9 @@ function policy() {
 }
 
 beforeAll(async () => {
+  console.info(
+    `Installed-package compatibility: project-boundary with Nx ${nxVersion}`,
+  );
   sourceManifest = readFileSync(
     join(repository, 'packages/project-boundary/package.json'),
     'utf8',
@@ -84,11 +96,22 @@ beforeAll(async () => {
   environment = {
     ...process.env,
     npm_config_userconfig: npmrc,
+    PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: 'false',
     NX_DAEMON: 'false',
     NX_ISOLATE_PLUGINS: 'false',
     NX_NO_CLOUD: 'true',
     FORCE_COLOR: '0',
   };
+  // Child CLIs must discover the fixture, not inherit the outer Nx task workspace.
+  for (const key of Object.keys(environment))
+    if (key.startsWith('NX_')) delete environment[key];
+  Object.assign(environment, {
+    NX_DAEMON: 'false',
+    NX_ISOLATE_PLUGINS: 'false',
+    NX_NO_CLOUD: 'true',
+    NX_WORKSPACE_ROOT_PATH: consumer,
+  });
+  delete environment.NODE_PATH;
   const tarball = join(temporary, 'project-boundary.tgz');
   const packed = await pnpm(
     ['pack', '--out', tarball],
@@ -99,8 +122,8 @@ beforeAll(async () => {
     name: 'boundary-fixture',
     private: true,
     devDependencies: {
-      nx: '23.2.0',
-      '@nx/js': '23.2.0',
+      nx: nxVersion,
+      '@nx/js': nxVersion,
       typescript: '~6.0.3',
       '@hao-nx-toolkit/project-boundary': `file:${tarball}`,
     },
@@ -113,10 +136,50 @@ beforeAll(async () => {
   const installed = await pnpm([
     'install',
     '--no-frozen-lockfile',
+    '--strict-peer-dependencies',
     '--store-dir',
     join(temporary, 'store'),
   ]);
   expect(installed.code, installed.text).toBe(0);
+  // Inspect the installed consumer, including transitive devkit resolution: an
+  // auto-installed nested baseline Nx must not make a newer-version run pass.
+  const runtime = await pnpm([
+    'exec',
+    'node',
+    '--eval',
+    `const {createRequire} = require('node:module');
+const {realpathSync} = require('node:fs');
+const {join} = require('node:path');
+const root = createRequire(join(process.cwd(), 'package.json'));
+const plugin = createRequire(root.resolve('@hao-nx-toolkit/project-boundary/package.json'));
+const devkit = createRequire(plugin.resolve('@nx/devkit/package.json'));
+const result = [root, plugin, devkit].map(resolve => {
+  const path = resolve.resolve('nx/package.json');
+  return {version: resolve('nx/package.json').version, path: realpathSync(path)};
+});
+console.log('TOOLKIT_NX_RESOLUTION=' + JSON.stringify(result));`,
+  ]);
+  expect(runtime.code, runtime.text).toBe(0);
+  const runtimeResult = runtime.text
+    .split('\n')
+    .find((line) => line.startsWith('TOOLKIT_NX_RESOLUTION='));
+  expect(runtimeResult, runtime.text).toBeDefined();
+  const resolutions = JSON.parse(
+    runtimeResult!.slice('TOOLKIT_NX_RESOLUTION='.length),
+  ) as {
+    version: string;
+    path: string;
+  }[];
+  for (const resolution of resolutions) {
+    expect(resolution.version, JSON.stringify(resolutions)).toBe(nxVersion);
+    expect(
+      resolution.path.startsWith(realpathSync(consumer) + '/'),
+      JSON.stringify(resolutions),
+    ).toBe(true);
+  }
+  const cli = await pnpm(['nx', '--version']);
+  expect(cli.code, cli.text).toBe(0);
+  expect(cli.text).toContain(`Local: v${nxVersion}`);
 }, 240_000);
 
 afterAll(() => {
@@ -159,6 +222,7 @@ it('installs the packaged plugin and initializes a runnable uncached root target
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
   ]);
   expect(check.code, check.text).toBe(0);
 }, 60_000);
@@ -237,6 +301,7 @@ it('fails workspace violations with readable JSON diagnostics while a selected s
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
     '--',
     '--outputFile=reports/workspace.json',
   ]);
@@ -266,6 +331,7 @@ it('fails workspace violations with readable JSON diagnostics while a selected s
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
     '--',
     '--project=app',
     '--outputFile=reports/app.json',
@@ -280,6 +346,7 @@ it('fails workspace violations with readable JSON diagnostics while a selected s
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
     '--',
     '--project=lib',
   ]);
@@ -345,12 +412,14 @@ it('passes the workspace after explicit policy fixes and reports unknown-project
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
   ]);
   expect(passing.code, passing.text).toBe(0);
   const unknown = await pnpm([
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
     '--',
     '--project=unknown',
     '--outputFile=reports/error.json',
@@ -368,6 +437,7 @@ it('passes the workspace after explicit policy fixes and reports unknown-project
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
   ]);
   expect(unsupported.code, unsupported.text).toBe(1);
   expect(unsupported.text).toContain(
@@ -382,6 +452,7 @@ it('passes the workspace after explicit policy fixes and reports unknown-project
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
   ]);
   expect(regex.code, regex.text).toBe(1);
   expect(regex.text).toContain('Configuration error');
@@ -792,6 +863,7 @@ it('rejects effective wildcard and filtered source conflicts transactionally and
       'nx',
       'run',
       'boundary-fixture:check-boundaries-all',
+      '--output-style=static',
       ...(configuration ? [`--configuration=${configuration}`] : []),
     ]);
     expect(result.code, result.text).toBe(0);
@@ -885,7 +957,12 @@ it('preserves Nx spread behavior and validates inferred boundary layers and inhe
     options: { project: 'app' },
     configurations: { ci: { outputFile: 'reports/spread-ci.json' } },
   });
-  const appRun = await pnpm(['nx', 'run', 'app:check-boundaries']);
+  const appRun = await pnpm([
+    'nx',
+    'run',
+    'app:check-boundaries',
+    '--output-style=static',
+  ]);
   expect(appRun.code, appRun.text).toBe(0);
   expect(read('reports/spread-ci.json')).toMatchObject({
     scope: { kind: 'project', project: 'app' },
@@ -907,6 +984,7 @@ it('preserves Nx spread behavior and validates inferred boundary layers and inhe
     'nx',
     'run',
     'boundary-fixture:check-boundaries-all',
+    '--output-style=static',
   ]);
   expect(allRun.code, allRun.text).toBe(0);
   expect(read('reports/spread-all.json')).toMatchObject({

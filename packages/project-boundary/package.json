@@ -18,7 +18,8 @@
     "dist",
     "!**/*.tsbuildinfo",
     "executors.json",
-    "generators.json"
+    "generators.json",
+    "LICENSE"
   ],
   "nx": {
     "name": "project-boundary",
@@ -64,6 +65,28 @@
     "nx": "23.2.0"
   },
   "peerDependencies": {
-    "nx": "23.2.0"
+    "nx": "^23.2.0"
+  },
+  "description": "Tag-based project dependency boundary checks for Nx workspaces.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hao0731/hao-nx-toolkit.git",
+    "directory": "packages/project-boundary"
+  },
+  "homepage": "https://github.com/hao0731/hao-nx-toolkit/tree/main/packages/project-boundary#readme",
+  "bugs": {
+    "url": "https://github.com/hao0731/hao-nx-toolkit/issues"
+  },
+  "keywords": [
+    "nx",
+    "nx-plugin",
+    "monorepo",
+    "dependency-boundaries",
+    "project-graph"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   }
 }
