@@ -1,5 +1,13 @@
 # Releasing Hao Nx Toolkit
 
+## 0.2.0 release preparation
+
+Version `0.2.0` is prepared from merged PR #8 in a clean release worktree. Both packages advance together. See the [0.2.0 release notes](./releases/0.2.0.md). Publication and verification are pending.
+
+The release is previewed with `pnpm nx release 0.2.0 --skip-publish --dry-run`. Version and changelog preparation use the separate Nx commands with automatic commit, tag, push, and staging disabled, so the complete release metadata can be reviewed together. After validation, publish the inspected package tarballs, verify registry integrity and a clean consumer, then publish the annotated tag and GitHub Release with both tarballs and `SHA256SUMS`.
+
+## Historical 0.1.0 record
+
 The first public release, `0.1.0`, was published to npm on **2026-10-17 (Asia/Taipei)**: [@hao-nx-toolkit/golang@0.1.0](https://www.npmjs.com/package/@hao-nx-toolkit/golang/v/0.1.0) and [@hao-nx-toolkit/project-boundary@0.1.0](https://www.npmjs.com/package/@hao-nx-toolkit/project-boundary/v/0.1.0). Both packages have `latest` set to `0.1.0`. See the [release notes](./releases/0.1.0.md).
 
 **Do not rerun version preparation or publication for `0.1.0`.** The first-release commands below are a historical recipe. Both packages are fully published; a later release must use a new version. Only these two projects belong to Nx's fixed release group; the private repository root and E2E projects are excluded.

@@ -1,3 +1,19 @@
+## 0.2.0 (2026-10-18)
+
+### 🚀 Features
+
+- ⚠️ **project-boundary:** infer boundary targets from root configuration ([#8](https://github.com/hao0731/hao-nx-toolkit/pull/8))
+
+### ⚠️ Breaking Changes
+
+- **project-boundary:** targets are inferred from root plugin registration instead of written to each project. Existing target declarations are not migrated or removed and may override inference. Run the full workspace check in CI to catch uncovered projects; affected checks can skip projects without an inferred target.
+
+Both packages share version `0.2.0`; Golang generator behavior is unchanged. See the [release notes](./docs/releases/0.2.0.md) for setup and compatibility.
+
+### ❤️ Thank You
+
+- hao0731 @hao0731
+
 ## 0.1.0 (2026-10-17)
 
 Published to npm on 2026-10-17 (Asia/Taipei): [@hao-nx-toolkit/golang@0.1.0](https://www.npmjs.com/package/@hao-nx-toolkit/golang/v/0.1.0) and [@hao-nx-toolkit/project-boundary@0.1.0](https://www.npmjs.com/package/@hao-nx-toolkit/project-boundary/v/0.1.0). Both packages have `latest` set to `0.1.0`.
