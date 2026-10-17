@@ -8,6 +8,9 @@ export default [
       '@nx/dependency-checks': [
         'error',
         {
+          // Nx is the host peer consumed through @nx/devkit/internal, rather
+          // than a direct source import; keep its compatibility requirement.
+          ignoredDependencies: ['nx'],
           ignoredFiles: [
             '{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}',
             '{projectRoot}/vitest.config.{js,ts,mjs,mts}',
