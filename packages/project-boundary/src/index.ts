@@ -5,7 +5,8 @@ export type { BoundaryPluginOptions } from './discovery';
 
 export const createNodesV2: CreateNodesV2<BoundaryPluginOptions> = [
   'nx.json',
-  async (_, options, context) => {
+  async (files, options, context) => {
+    if (!files.length) return [];
     const roots = await discoverProjectRoots(context.workspaceRoot, options);
     return [
       [

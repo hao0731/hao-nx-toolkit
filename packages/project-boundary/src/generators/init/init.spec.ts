@@ -89,3 +89,23 @@ it('gives a nameless root package an Nx name and rejects unsupported init option
     'does not accept options',
   );
 });
+
+it('assigns a collision-free generated name to a nameless root', async () => {
+  writeJson(tree, 'package.json', { private: true });
+  addProjectConfiguration(tree, 'workspace', { root: 'apps/workspace' });
+  addProjectConfiguration(tree, 'workspace-1', { root: 'apps/other' });
+  await initGenerator(tree);
+  expect(readJson(tree, 'package.json').nx.name).toBe('workspace-2');
+});
+
+it('reports uncovered projects before writes when Nx registration filters disable inference', async () => {
+  addProjectConfiguration(tree, 'app', { root: 'apps/app' });
+  writeJson(tree, 'nx.json', {
+    plugins: [
+      { plugin: '@hao-nx-toolkit/project-boundary', exclude: ['nx.json'] },
+    ],
+  });
+  const before = tree.listChanges();
+  await expect(initGenerator(tree)).rejects.toThrow('app (apps/app)');
+  expect(tree.listChanges()).toEqual(before);
+});

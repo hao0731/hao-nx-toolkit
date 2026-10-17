@@ -1,4 +1,17 @@
-import { logger, readJson, updateJson, writeJson, type Tree } from '@nx/devkit';
+import {
+  createProjectGraphAsync,
+  getProjects,
+  logger,
+  readJson,
+  updateJson,
+  workspaceRoot,
+  writeJson,
+  type ProjectConfiguration,
+  type Tree,
+} from '@nx/devkit';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { assertProjectCoverage, configuredProjectRoots } from '../../discovery';
 import type { InitGeneratorSchema } from './schema';
 
 const plugin = '@hao-nx-toolkit/project-boundary';
@@ -9,22 +22,6 @@ export async function initGenerator(
 ) {
   if (Object.keys(options).length)
     throw new Error('The init generator does not accept options');
-  const rootFile = tree.exists('project.json')
-    ? 'project.json'
-    : 'package.json';
-  let rootName = 'workspace';
-  updateJson(tree, rootFile, (json) => {
-    const config = rootFile === 'project.json' ? json : (json.nx ??= {});
-    rootName = config.name ?? json.name ?? 'workspace';
-    if (!config.name && !json.name) config.name = rootName;
-    config.targets ??= {};
-    config.targets['check-boundaries-all'] ??= {
-      executor: `${plugin}:check`,
-      cache: false,
-      inputs: ['default', '{workspaceRoot}/project-boundary.config.json'],
-    };
-    return json;
-  });
   const nx = tree.exists('nx.json') ? readJson(tree, 'nx.json') : {};
   nx.plugins ??= [];
   if (
@@ -34,6 +31,53 @@ export async function initGenerator(
     )
   )
     nx.plugins.push({ plugin });
+  const projects = new Map<string, ProjectConfiguration>(getProjects(tree));
+  if (existsSync(join(tree.root, 'nx.json'))) {
+    if (tree.root !== workspaceRoot)
+      throw new Error('Initialization must run in the active Nx workspace');
+    const graph = await createProjectGraphAsync();
+    for (const [name, node] of Object.entries(graph.nodes)) {
+      const removed = tree
+        .listChanges()
+        .some(
+          (change) =>
+            change.type === 'DELETE' &&
+            [
+              join(node.data.root, 'project.json'),
+              join(node.data.root, 'package.json'),
+            ].includes(change.path),
+        );
+      if (
+        !removed &&
+        ![...projects.values()].some(
+          (project) => project.root === node.data.root,
+        )
+      )
+        projects.set(name, node.data);
+    }
+  }
+  const roots = await configuredProjectRoots(tree.root, nx, tree);
+  assertProjectCoverage(Object.fromEntries(projects), roots);
+  const rootFile = tree.exists('project.json')
+    ? 'project.json'
+    : 'package.json';
+  let rootName = 'workspace';
+  updateJson(tree, rootFile, (json) => {
+    const config = rootFile === 'project.json' ? json : (json.nx ??= {});
+    rootName = config.name ?? json.name ?? 'workspace';
+    if (!config.name && !json.name) {
+      let suffix = 0;
+      while (projects.has(rootName)) rootName = `workspace-${++suffix}`;
+      config.name = rootName;
+    }
+    config.targets ??= {};
+    config.targets['check-boundaries-all'] ??= {
+      executor: `${plugin}:check`,
+      cache: false,
+      inputs: ['default', '{workspaceRoot}/project-boundary.config.json'],
+    };
+    return json;
+  });
   writeJson(tree, 'nx.json', nx);
   if (!tree.exists('project-boundary.config.json'))
     writeJson(tree, 'project-boundary.config.json', {

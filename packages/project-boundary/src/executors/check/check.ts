@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import type { CheckExecutorSchema } from './schema';
+import { assertProjectCoverage, configuredProjectRoots } from '../../discovery';
 
 interface Constraint {
   sourceTag?: string;
@@ -189,6 +190,16 @@ const runExecutor: PromiseExecutor<CheckExecutorSchema> = async (
     const constraintsConfig = readConstraints(configPath);
     phase = 'runtime';
     const graph = context.projectGraph ?? (await createProjectGraphAsync());
+    if (context.targetName === 'check-boundaries-all') {
+      phase = 'configuration';
+      assertProjectCoverage(
+        Object.fromEntries(
+          Object.entries(graph.nodes).map(([name, node]) => [name, node.data]),
+        ),
+        await configuredProjectRoots(context.root, context.nxJsonConfiguration),
+      );
+      phase = 'runtime';
+    }
     if (
       options.project !== undefined &&
       (typeof options.project !== 'string' ||
