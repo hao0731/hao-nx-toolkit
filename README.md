@@ -17,7 +17,7 @@ Hao Nx Toolkit plugins share a single toolkit version. Both plugins declare **Nx
 
 | Hao Nx Toolkit version         | Declared Nx range      | Verified Nx versions                   |
 | ------------------------------ | ---------------------- | -------------------------------------- |
-| `0.3.0` (prepared)             | `^23.2.0 \|\| ^24.0.0` | `23.2.0`, `23.2.1`, `23.3.0`, `24.0.0` |
+| `0.3.0` (published 2026-10-23) | `^23.2.0 \|\| ^24.0.0` | `23.2.0`, `23.2.1`, `23.3.0`, `24.0.0` |
 | `0.0.1` (development)          | `^23.2.0`              | `23.2.0`, `23.2.1`, `23.3.0`           |
 | `0.1.0` (published 2026-10-17) | `^23.2.0`              | `23.2.0`, `23.2.1`, `23.3.0`           |
 | `0.2.0` (published 2026-10-18) | `^23.2.0`              | `23.2.0`, `23.2.1`, `23.3.0`           |
@@ -26,9 +26,9 @@ The verified versions have passed installed-package E2E tests for both plugins. 
 
 ## Releases
 
-Version **0.2.0** was published to npm on **2026-10-18 (Asia/Taipei)**. Install [@hao-nx-toolkit/golang@0.2.0](https://www.npmjs.com/package/@hao-nx-toolkit/golang/v/0.2.0) and [@hao-nx-toolkit/project-boundary@0.2.0](https://www.npmjs.com/package/@hao-nx-toolkit/project-boundary/v/0.2.0); both have `latest` set to `0.2.0`.
+Version **0.3.0** was published to npm on **2026-10-23 (Asia/Taipei)**. Install [@hao-nx-toolkit/golang@0.3.0](https://www.npmjs.com/package/@hao-nx-toolkit/golang/v/0.3.0) and [@hao-nx-toolkit/project-boundary@0.3.0](https://www.npmjs.com/package/@hao-nx-toolkit/project-boundary/v/0.3.0); both have `latest` set to `0.3.0`.
 
-Read the [0.2.0 release notes](./docs/releases/0.2.0.md) for the breaking root-inference setup change, verification, and dependency-audit limitation. Registry downloads match the audited artifacts, and a public-registry smoke test passed. The [GitHub Release](https://github.com/hao0731/hao-nx-toolkit/releases/tag/v0.2.0) provides the tarballs and `SHA256SUMS`.
+Read the [0.3.0 release notes](./docs/releases/0.3.0.md) for Nx 24 support, retained Nx 23 compatibility, validation, and dependency-audit limitations. Registry tarballs match the inspected artifacts, and public-registry smoke tests passed on Nx 23.2.0 and 24.0.0.
 
 See the [release guide](./docs/releasing.md), [changelog](./CHANGELOG.md), and [first release notes](./docs/releases/0.1.0.md) for process and history.
 

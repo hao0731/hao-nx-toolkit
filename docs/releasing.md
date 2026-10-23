@@ -1,5 +1,9 @@
 # Releasing Hao Nx Toolkit
 
+## 0.3.0 release
+
+Both packages were published to npm on **2026-10-23 (Asia/Taipei)** with `latest` set to `0.3.0`. The inspected tarballs from preparation commit `28a664b` match registry downloads byte for byte and by SHA-512 integrity. All four compatibility matrix versions passed installed-package E2E; public-registry smoke tests passed on Nx 23.2.0 and 24.0.0. See the [release notes](./releases/0.3.0.md), including dependency-audit limitations. Artifacts are retained in `tmp/releases/0.3.0/`. Git commits and the local release tag have not been pushed. Do not republish this version.
+
 ## 0.2.0 release
 
 Version `0.2.0` was published to npm on **2026-10-18 (Asia/Taipei)** for both packages, with `latest` set to `0.2.0`. See the [release notes](./releases/0.2.0.md), including the Nx baseline dependency-audit limitation.

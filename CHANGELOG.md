@@ -1,5 +1,7 @@
 ## 0.3.0 (2026-10-23)
 
+Published to npm; both packages have `latest` set to `0.3.0`. See the [release notes](./docs/releases/0.3.0.md) for validation and dependency-audit limitations.
+
 ### 🚀 Features
 
 - support Nx 24 while retaining Nx 23 compatibility ([6b3c9f2](https://github.com/hao0731/hao-nx-toolkit/commit/6b3c9f2))
