@@ -2,7 +2,7 @@
 
 ## 0.3.0 release
 
-Both packages were published to npm on **2026-10-23 (Asia/Taipei)** with `latest` set to `0.3.0`. The inspected tarballs from preparation commit `28a664b` match registry downloads byte for byte and by SHA-512 integrity. All four compatibility matrix versions passed installed-package E2E; public-registry smoke tests passed on Nx 23.2.0 and 24.0.0. See the [release notes](./releases/0.3.0.md), including dependency-audit limitations. Artifacts are retained in `tmp/releases/0.3.0/`. Git commits and the local release tag have not been pushed. Do not republish this version.
+Both packages were published to npm on **2026-10-23 (Asia/Taipei)** with `latest` set to `0.3.0`. The inspected tarballs from preparation commit `28a664b` match registry downloads byte for byte and by SHA-512 integrity. All four compatibility matrix versions passed installed-package E2E; public-registry smoke tests passed on Nx 23.2.0 and 24.0.0. See the [release notes](./releases/0.3.0.md), including dependency-audit limitations. Artifacts are retained in `tmp/releases/0.3.0/`. The commits and annotated `v0.3.0` tag have been pushed. The [GitHub Release](https://github.com/hao0731/hao-nx-toolkit/releases/tag/v0.3.0) is published as latest with both tarballs and `SHA256SUMS`. Do not republish this version.
 
 ## 0.2.0 release
 
