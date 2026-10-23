@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        nx-version: ['23.2.0', '23.2.1', '23.3.0']
+        nx-version: ['23.2.0', '23.2.1', '23.3.0', '24.0.0']
     env:
       TOOLKIT_E2E_NX_VERSION: ${{ matrix.nx-version }}
     steps:

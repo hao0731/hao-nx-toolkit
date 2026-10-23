@@ -8,7 +8,7 @@ The plugin supports workspace-wide, per-project, and affected checks, plus optio
 
 ## Compatibility
 
-This version accepts **Nx `^23.2.0`** (stable versions `>=23.2.0 <24.0.0`; prereleases excluded). Installed-package E2E tests verify **23.2.0, 23.2.1, and 23.3.0**. Other versions in the range have not yet been verified. See the [toolkit version compatibility table](https://github.com/hao0731/hao-nx-toolkit#nx-version-compatibility) when choosing a version for your workspace.
+This version accepts **Nx `^23.2.0 || ^24.0.0`** (stable versions `>=23.2.0 <25.0.0`; prereleases excluded). Installed-package E2E tests verify **23.2.0, 23.2.1, 23.3.0, and 24.0.0**. Other versions in the range have not yet been verified. See the [toolkit version compatibility table](https://github.com/hao0731/hao-nx-toolkit#nx-version-compatibility) when choosing a version for your workspace.
 
 ## Install and initialize
 
@@ -187,7 +187,7 @@ Replace `main` with your comparison branch or commit. For current uncommitted ch
 pnpm nx affected -t check-boundaries --uncommitted --output-style=static
 ```
 
-Nx also selects reverse dependents, so changing a dependency target's tags rechecks projects that depend on it. The inferred targets include the shared policy as a workspace input, so policy changes select all covered projects. Caching defaults to disabled. Checks read the complete current graph, including unchanged dependency targets and their tags; staged-only snapshot validation is not supported. Nx overrides can change these defaults.
+Nx also selects reverse dependents, so changing a dependency target's tags rechecks projects that depend on it. The inferred targets include their own files, dependency files (`^default`), and the shared policy as inputs. This preserves reverse-dependent checks with Nx 24 task-based affected selection, and policy changes select all covered projects. Caching defaults to disabled. Checks read the complete current graph, including unchanged dependency targets and their tags; staged-only snapshot validation is not supported. Nx overrides can change these defaults.
 
 Include a full check alongside affected checks so newly uncovered projects fail CI:
 
@@ -268,9 +268,9 @@ From this repository's root:
 
 ```bash
 pnpm nx run-many -p project-boundary -t lint test build typecheck
-TOOLKIT_E2E_NX_VERSION=23.3.0 pnpm nx e2e project-boundary-e2e
+TOOLKIT_E2E_NX_VERSION=24.0.0 pnpm nx e2e project-boundary-e2e
 ```
 
-`TOOLKIT_E2E_NX_VERSION` defaults to `23.2.0` and accepts an exact stable version in `^23.2.0`. CI runs installed-package tests against `23.2.0`, `23.2.1`, and `23.3.0` on every pull request and main-branch push. Strict peer installation and runtime assertions verify the selected Nx at the consumer root, plugin, devkit dependency, and CLI. Tests exercise root-only initialization, transactional coverage failures, workspace package membership and exclusions, newly discovered projects, custom markers, Nx defaults and explicit target overrides, native affected checks, isolated plugin workers, and reports.
+`TOOLKIT_E2E_NX_VERSION` defaults to `24.0.0` and accepts an exact stable version in `^23.2.0 || ^24.0.0`. CI runs installed-package tests against `23.2.0`, `23.2.1`, `23.3.0`, and `24.0.0` on every pull request and main-branch push. Strict peer installation and runtime assertions verify the selected Nx at the consumer root, plugin, devkit dependency, and CLI. Tests exercise root-only initialization, transactional coverage failures, workspace package membership and exclusions, newly discovered projects, custom markers, Nx defaults and explicit target overrides, native affected checks, isolated plugin workers, and reports.
 
-Discovery reuses Nx's package-manager workspace matching, workspace file search, and plugin registration filtering through the exported **`@nx/devkit/internal`** entry point. Target defaults and merging are handled by Nx itself. The internal discovery helpers carry no public API compatibility guarantee. The plugin pins `@nx/devkit` to the 23.2.0 baseline, and the installed-package matrix guards the currently verified consumer versions. Add future Nx 23.x versions to the matrix and pass these checks before calling them verified.
+Discovery reuses Nx's package-manager workspace matching, workspace file search, and plugin registration filtering through the exported **`@nx/devkit/internal`** entry point. Target defaults and merging are handled by Nx itself. The internal discovery helpers carry no public API compatibility guarantee. The plugin pins `@nx/devkit` to the 24.0.0 baseline, and the installed-package matrix guards the currently verified consumer versions. Add future Nx 23.x or 24.x versions to the matrix and pass these checks before calling them verified.

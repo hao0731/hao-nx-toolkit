@@ -22,6 +22,7 @@ export const createNodesV2: CreateNodesV2<BoundaryPluginOptions> = [
                     cache: false,
                     inputs: [
                       'default',
+                      '^default',
                       '{workspaceRoot}/project-boundary.config.json',
                     ],
                   },

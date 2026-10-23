@@ -56,16 +56,16 @@
     ]
   },
   "dependencies": {
-    "@nx/devkit": "23.2.0",
+    "@nx/devkit": "24.0.0",
     "tslib": "^2.3.0"
   },
   "executors": "./executors.json",
   "generators": "./generators.json",
   "devDependencies": {
-    "nx": "23.2.0"
+    "nx": "24.0.0"
   },
   "peerDependencies": {
-    "nx": "^23.2.0"
+    "nx": "^23.2.0 || ^24.0.0"
   },
   "description": "Tag-based project dependency boundary checks for Nx workspaces.",
   "license": "MIT",

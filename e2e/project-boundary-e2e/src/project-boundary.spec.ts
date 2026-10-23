@@ -16,13 +16,13 @@ import { promisify } from 'node:util';
 
 const execute = promisify(execFile);
 const repository = fileURLToPath(new URL('../../../', import.meta.url));
-const nxVersion = process.env.TOOLKIT_E2E_NX_VERSION ?? '23.2.0';
+const nxVersion = process.env.TOOLKIT_E2E_NX_VERSION ?? '24.0.0';
 if (
-  !/^23\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(nxVersion) ||
-  Number(nxVersion.split('.')[1]) < 2
+  !/^(?:23|24)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(nxVersion) ||
+  (nxVersion.startsWith('23.') && Number(nxVersion.split('.')[1]) < 2)
 )
   throw new Error(
-    `TOOLKIT_E2E_NX_VERSION must be an exact stable Nx version within ^23.2.0; received ${JSON.stringify(nxVersion)}`,
+    `TOOLKIT_E2E_NX_VERSION must be an exact stable Nx version within ^23.2.0 || ^24.0.0; received ${JSON.stringify(nxVersion)}`,
   );
 let temporary: string;
 let consumer: string;

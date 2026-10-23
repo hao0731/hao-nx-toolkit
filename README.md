@@ -13,15 +13,16 @@ See each plugin's README for installation, configuration, and usage instructions
 
 ## Nx version compatibility
 
-Hao Nx Toolkit plugins share a single toolkit version. Both plugins declare **Nx `^23.2.0`** as their peer range: stable versions `>=23.2.0 <24.0.0`. Prerelease versions are outside this range.
+Hao Nx Toolkit plugins share a single toolkit version. Both plugins declare **Nx `^23.2.0 || ^24.0.0`** as their peer range: stable versions `>=23.2.0 <25.0.0`. Prerelease versions are outside this range.
 
-| Hao Nx Toolkit version         | Declared Nx range | Verified Nx versions         |
-| ------------------------------ | ----------------- | ---------------------------- |
-| `0.0.1` (development)          | `^23.2.0`         | `23.2.0`, `23.2.1`, `23.3.0` |
-| `0.1.0` (published 2026-10-17) | `^23.2.0`         | `23.2.0`, `23.2.1`, `23.3.0` |
-| `0.2.0` (published 2026-10-18) | `^23.2.0`         | `23.2.0`, `23.2.1`, `23.3.0` |
+| Hao Nx Toolkit version         | Declared Nx range      | Verified Nx versions                   |
+| ------------------------------ | ---------------------- | -------------------------------------- |
+| Unreleased                     | `^23.2.0 \|\| ^24.0.0` | `23.2.0`, `23.2.1`, `23.3.0`, `24.0.0` |
+| `0.0.1` (development)          | `^23.2.0`              | `23.2.0`, `23.2.1`, `23.3.0`           |
+| `0.1.0` (published 2026-10-17) | `^23.2.0`              | `23.2.0`, `23.2.1`, `23.3.0`           |
+| `0.2.0` (published 2026-10-18) | `^23.2.0`              | `23.2.0`, `23.2.1`, `23.3.0`           |
 
-The verified versions have passed installed-package E2E tests for both plugins. CI runs this exact matrix on every pull request and main-branch push. Other stable versions in the declared range are eligible for installation, but add them to the matrix and pass the checks before describing them as verified. Repository development, builds, and the plugins' `@nx/devkit` dependency remain pinned to the Nx 23.2.0 baseline.
+The verified versions have passed installed-package E2E tests for both plugins. CI runs this exact matrix on every pull request and main-branch push. Other stable versions in the declared range are eligible for installation, but add them to the matrix and pass the checks before describing them as verified. Repository development, builds, and the plugins' `@nx/devkit` dependency remain pinned to the Nx 24.0.0 baseline.
 
 ## Releases
 
