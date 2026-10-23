@@ -1,3 +1,13 @@
+## 0.3.0 (2026-10-23)
+
+### 🚀 Features
+
+- support Nx 24 while retaining Nx 23 compatibility ([6b3c9f2](https://github.com/hao0731/hao-nx-toolkit/commit/6b3c9f2))
+
+### ❤️ Thank You
+
+- hao0731
+
 ## 0.2.0 (2026-10-18)
 
 Published to npm on 2026-10-18 (Asia/Taipei). Both packages have `latest` set to `0.2.0`; registry tarballs match the audited artifacts and the registry consumer smoke test passed. See the [release notes](./docs/releases/0.2.0.md) for the dependency-audit limitation.

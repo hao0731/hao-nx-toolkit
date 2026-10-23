@@ -1,6 +1,6 @@
 {
   "name": "@hao-nx-toolkit/golang",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "commonjs",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
