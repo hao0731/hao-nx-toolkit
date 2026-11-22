@@ -1,3 +1,13 @@
+## 0.3.1 (2026-11-22)
+
+### 🩹 Fixes
+
+- **project-boundary:** resolve the packed plugin under @org/source ([#9](https://github.com/hao0731/hao-nx-toolkit/pull/9))
+
+### ❤️ Thank You
+
+- hao0731 @hao0731
+
 ## 0.3.0 (2026-10-23)
 
 Published to npm; both packages have `latest` set to `0.3.0`. See the [release notes](./docs/releases/0.3.0.md) for validation and dependency-audit limitations.
