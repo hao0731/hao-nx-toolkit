@@ -113,12 +113,12 @@ beforeAll(async () => {
     NX_WORKSPACE_ROOT_PATH: consumer,
   });
   delete environment.NODE_PATH;
-  const tarball = join(temporary, 'project-boundary.tgz');
-  const packed = await pnpm(
-    ['pack', '--out', tarball],
-    join(repository, 'packages/project-boundary'),
+  const packed = await execute(
+    'npm',
+    ['pack', '--json', '--pack-destination', temporary],
+    { cwd: join(repository, 'packages/project-boundary'), env: environment },
   );
-  expect(packed.code, packed.text).toBe(0);
+  const tarball = join(temporary, JSON.parse(packed.stdout)[0].filename);
   json('package.json', {
     name: 'boundary-fixture',
     private: true,
@@ -199,6 +199,21 @@ afterAll(() => {
   }
 });
 
+it('resolves the packed entry point with and without the workspace source condition', async () => {
+  const plugin = '@hao-nx-toolkit/project-boundary';
+  const expected = realpathSync(
+    join(consumer, 'node_modules', plugin, 'dist/index.js'),
+  );
+  for (const conditions of [[], ['--conditions=@org/source']]) {
+    const { stdout } = await execute(
+      process.execPath,
+      [...conditions, '-p', `require.resolve('${plugin}')`],
+      { cwd: consumer, env: environment },
+    );
+    expect(stdout.trim()).toBe(expected);
+  }
+});
+
 it('installs the packaged plugin and initializes a runnable uncached root target with an editor schema', async () => {
   expect(
     read('node_modules/@hao-nx-toolkit/project-boundary/package.json').version,
@@ -253,6 +268,8 @@ it('preserves customized policy on repeat initialization and checks actual stati
   }
   json('tsconfig.base.json', {
     compilerOptions: {
+      customConditions: ['@org/source'],
+      moduleResolution: 'bundler',
       baseUrl: '.',
       paths: {
         '@fixture/lib': ['libs/lib/index.ts'],
